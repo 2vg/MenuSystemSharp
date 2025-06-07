@@ -6,6 +6,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>MenuSystemSharp</RootNamespace>
     <Authors>MenuSystemSharp</Authors>
+    <AssemblyTitle>MenuSystemSharp</AssemblyTitle>
+    <Product>MenuSystemSharp</Product>
+    <Description>C# wrapper for Wend4r's MetaMod Menu System for CounterStrikeSharp</Description>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>
   
   <ItemGroup>
