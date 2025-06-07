@@ -3,6 +3,7 @@ using CounterStrikeSharp.API.Core;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using CounterStrikeSharp.API.Modules.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace MenuSystemSharp;
 
@@ -31,10 +32,10 @@ public class MenuSystemCSharp : BasePlugin
 
             if (!string.IsNullOrEmpty(menuPath))
             {
-                Console.WriteLine($"[{ModuleName}] Attempting to load native library: {menuPath}");
+                Logger.LogDebug("Attempting to load native library: {MenuPath}", menuPath);
                 if (NativeLibrary.TryLoad(menuPath, out _nativeLibraryHandle))
                 {
-                    Console.WriteLine($"[{ModuleName}] Successfully loaded library '{menuPath}'. Handle: 0x{_nativeLibraryHandle:X}.");
+                    Logger.LogDebug("Successfully loaded library '{MenuPath}'. Handle: 0x{Handle:X}", menuPath, _nativeLibraryHandle);
                 }
                 else
                 {
@@ -42,21 +43,21 @@ public class MenuSystemCSharp : BasePlugin
                     // No further action like TryGetHandle as it's not available or not deemed necessary here.
                     // The existing _nativeLibraryHandle (which is likely IntPtr.Zero if TryLoad failed) will be passed to InitializeStaticExports.
                     // InitializeStaticExports already has a check for IntPtr.Zero.
-                    Console.WriteLine($"[{ModuleName}] FAILED to load library '{menuPath}' using TryLoad. _nativeLibraryHandle is 0x{_nativeLibraryHandle:X}. Exported functions will likely not work if handle is zero.");
+                    Logger.LogError("FAILED to load library '{MenuPath}' using TryLoad. _nativeLibraryHandle is 0x{Handle:X}. Exported functions will likely not work if handle is zero", menuPath, _nativeLibraryHandle);
                 }
             }
             else
             {
-                Console.WriteLine($"[{ModuleName}] OS platform not supported for determining native library name, or menuPath is empty. _nativeLibraryHandle remains IntPtr.Zero. Exported functions will likely not work.");
+                Logger.LogError("OS platform not supported for determining native library name, or menuPath is empty. _nativeLibraryHandle remains IntPtr.Zero. Exported functions will likely not work");
             }
 
             MenuWrapper.InitializeStaticExports(_nativeLibraryHandle);
             _menuSystemInstance = new MenuSystemWrapper(menuSystemPtr);
-            Console.WriteLine($"[{ModuleName}] Wrappers initialized.");
+            Logger.LogDebug("Wrappers initialized");
 
-            Console.WriteLine($"[{ModuleName}] Plugin loaded successfully.");
+            Logger.LogDebug("Plugin loaded successfully");
         }
-        catch (Exception ex) { Server.PrintToConsole($"[{ModuleName}] Exception during load: {ex}"); }
+        catch (Exception ex) { Logger.LogError(ex, "Exception during load"); }
     }
 
     public static IMenuSystem? GetMenuSystemInstance()
@@ -75,10 +76,10 @@ public class MenuSystemCSharp : BasePlugin
             IntPtr? menuSystemPtr = Utilities.MetaFactory(MENU_SYSTEM_VERSION);
             if (!menuSystemPtr.HasValue || menuSystemPtr.Value == IntPtr.Zero)
             {
-                Server.PrintToConsole($"[{ModuleName}] ERROR: {MENU_SYSTEM_VERSION} not found.");
+                Logger.LogError("ERROR: {MenuSystemVersion} not found", MENU_SYSTEM_VERSION);
                 return;
             }
-            Console.WriteLine($"[{ModuleName}] {MENU_SYSTEM_VERSION} found: 0x{menuSystemPtr.Value:X}.");
+            Logger.LogDebug("{MenuSystemVersion} found: 0x{Pointer:X}", MENU_SYSTEM_VERSION, menuSystemPtr.Value);
 
             LoadMenuLibrary(menuSystemPtr.Value);
         });
@@ -210,7 +211,7 @@ public class MenuWrapper : IMenu
 
         if (libraryHandle == IntPtr.Zero)
         {
-            Console.WriteLine("[MenuWrapper.InitializeStaticExports] Invalid library handle. Exports not loaded.");
+            MenuSystemCSharp.Instance?.Logger.LogError("Invalid library handle. Exports not loaded");
             _menuAddItemNative = null;
             _menuGetTitleNative = null;
             _menuSetTitleNative = null;
@@ -227,11 +228,11 @@ public class MenuWrapper : IMenu
         try
         {
             _menuAddItemNative = NativeLibrary.GetExport(libraryHandle, "Menu_AddItem").MarshalTo<MenuAddItemDelegate>();
-            Console.WriteLine("[MenuWrapper.InitializeStaticExports] Menu_AddItem delegate initialized.");
+            MenuSystemCSharp.Instance?.Logger.LogDebug("Menu_AddItem delegate initialized");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MenuWrapper.InitializeStaticExports] Error loading Menu_AddItem: {ex.Message}");
+            MenuSystemCSharp.Instance?.Logger.LogError(ex, "Error loading Menu_AddItem");
             _menuAddItemNative = null;
         }
     }
@@ -241,11 +242,11 @@ public class MenuWrapper : IMenu
         try
         {
             _menuGetTitleNative = NativeLibrary.GetExport(libraryHandle, "Menu_GetTitle").MarshalTo<MenuGetTitleDelegate>();
-            Console.WriteLine("[MenuWrapper.InitializeStaticExports] Menu_GetTitle delegate initialized.");
+            MenuSystemCSharp.Instance?.Logger.LogDebug("Menu_GetTitle delegate initialized");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MenuWrapper.InitializeStaticExports] Error loading Menu_GetTitle: {ex.Message}");
+            MenuSystemCSharp.Instance?.Logger.LogError(ex, "Error loading Menu_GetTitle");
             _menuGetTitleNative = null;
         }
     }
@@ -255,11 +256,11 @@ public class MenuWrapper : IMenu
         try
         {
             _menuSetTitleNative = NativeLibrary.GetExport(libraryHandle, "Menu_SetTitle").MarshalTo<MenuSetTitleDelegate>();
-            Console.WriteLine("[MenuWrapper.InitializeStaticExports] Menu_SetTitle delegate initialized.");
+            MenuSystemCSharp.Instance?.Logger.LogDebug("Menu_SetTitle delegate initialized");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MenuWrapper.InitializeStaticExports] Error loading Menu_SetTitle: {ex.Message}");
+            MenuSystemCSharp.Instance?.Logger.LogError(ex, "Error loading Menu_SetTitle");
             _menuSetTitleNative = null;
         }
     }
@@ -278,7 +279,7 @@ public class MenuWrapper : IMenu
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[OnNativeMenuItemSelectCallback] Error: {ex}");
+            MenuSystemCSharp.Instance?.Logger.LogError(ex, "Error in OnNativeMenuItemSelectCallback");
         }
         finally
         {
