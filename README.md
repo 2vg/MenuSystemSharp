@@ -7,24 +7,6 @@
 MenuSystemSharp is a library and sample plugin designed to enable the use of [Wend4r's mms2-menu_system](https://github.com/Wend4r/mms2-menu_system), a MetaMod plugin for Counter-Strike 2 (CS2), from C#.
 It is intended to run on the CounterStrikeSharp framework.
 
-## Purpose
-
-The primary goal of this project is to make the powerful C++ based menu system easily accessible to plugin developers who use C#.
-This will allow for more efficient development of in-game menus with complex interactions in C#.
-
-## Key Features
-
-*   **C# Interface Definitions**: Provides C# interfaces corresponding to the original C++ interfaces (`IMenuSystem`, `IMenuProfileSystem`, `IMenu`, etc.).
-*   **Wrapper Classes**: Wraps C++ instance pointers, allowing safe and intuitive method calls from C#.
-    *   `MenuSystemWrapper`
-    *   `MenuProfileSystemWrapper`
-    *   `MenuWrapper`
-    *   `MenuProfileWrapper`
-*   **Native Function Calls**: Utilizes `NativeLibrary` to call core menu system functionalities (like adding items, setting titles) as C functions.
-*   **Callback Handling**: Enables C# implementation of menu item selection callbacks using C# delegates and the `[UnmanagedCallersOnly]` attribute.
-*   **Helper Classes**: Provides `MenuSystemHelper` for easy menu creation and management from external plugins.
-*   **External Plugin Support**: Designed to be used as a dependency by other CounterStrikeSharp plugins.
-
 ## TODO
 
 *  Implement resolution switch
@@ -220,19 +202,6 @@ Available `MenuItemStyleFlags`:
 - `Control`: Control item (like Back/Exit)
 - `Default`: Combination of `Active | HasNumber`
 - `Full`: Combination of `Default | Control`
-
-### Error Handling
-
-Always check if the MenuSystem is available before using it:
-
-```csharp
-if (!MenuSystemHelper.IsAvailable)
-{
-    // Handle case where menu system is not loaded
-    player.PrintToChat("Menu system is not available.");
-    return;
-}
-```
 
 ## Special Thanks
 
