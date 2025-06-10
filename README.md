@@ -128,4 +128,4 @@ Pull requests and issue reports are welcome.
 ## Related Links
 
 - [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
-- [Wend4r's MetaMod Menu System](https://github.com/Wend4r/s2u-menu_system)
+- [Wend4r's MetaMod Menu System](https://github.com/Wend4r/mms2-menu_system)
