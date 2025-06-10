@@ -194,9 +194,11 @@ internal class MenuItemCallbackContext(MenuItemSelectAction callback, IMenu menu
     public IMenu MenuInstance { get; } = menuInstance;
 }
 
-public class MenuWrapper : IMenu
+public class MenuWrapper : IMenu, IDisposable
 {
     public IntPtr InstancePtr { get; private set; }
+    private readonly List<GCHandle> _allocatedHandles = new();
+    private bool _disposed = false;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int MenuAddItemDelegate(IntPtr menuPtr, MenuItemStyleFlags flags, string content, IntPtr itemHandler, IntPtr data);
@@ -291,11 +293,8 @@ public class MenuWrapper : IMenu
         {
             MenuSystemCSharp.Instance?.Logger.LogError(ex, "Error in OnNativeMenuItemSelectCallback");
         }
-        finally
-        {
-            if (contextHandle.IsAllocated)
-                contextHandle.Free();
-        }
+        // NOTE: GCHandle is no longer freed here - it will be freed when the menu is disposed
+        // This allows the callback to be invoked multiple times
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -377,15 +376,60 @@ public class MenuWrapper : IMenu
         if (_menuAddItemNative == null) throw new InvalidOperationException("Menu_AddItem (native) not initialized.");
         var context = new MenuItemCallbackContext(onSelectCallback, this);
         GCHandle contextHandle = GCHandle.Alloc(context, GCHandleType.Normal);
+        
+        _allocatedHandles.Add(contextHandle);
+        
         IntPtr pContextGCHandle = GCHandle.ToIntPtr(contextHandle);
         int itemId = _menuAddItemNative(InstancePtr, style, content, _staticNativeCallbackPointer, pContextGCHandle);
-        if (itemId < 0) { if (contextHandle.IsAllocated) contextHandle.Free(); }
+        
+        if (itemId < 0)
+        {
+            _allocatedHandles.Remove(contextHandle);
+            if (contextHandle.IsAllocated)
+                contextHandle.Free();
+        }
+        
         return itemId;
     }
 
     public int GetCurrentPosition(int playerSlot)
     {
         return _getCurrentPositionFunction.Invoke(InstancePtr, playerSlot);
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                FreeAllocatedHandles();
+            }
+            _disposed = true;
+        }
+    }
+
+    ~MenuWrapper()
+    {
+        Dispose(false);
+    }
+
+    private void FreeAllocatedHandles()
+    {
+        foreach (var handle in _allocatedHandles)
+        {
+            if (handle.IsAllocated)
+            {
+                handle.Free();
+            }
+        }
+        _allocatedHandles.Clear();
     }
 }
 
@@ -492,7 +536,15 @@ public class MenuSystemWrapper : IMenuSystem
         if (menuPtr == IntPtr.Zero && menu != null)
             return false;
         
-        return _closeInstanceFunction.Invoke(_instancePtr, menuPtr);
+        bool result = _closeInstanceFunction.Invoke(_instancePtr, menuPtr);
+        
+        // Dispose the menu wrapper to free GCHandles
+        if (result && menu is IDisposable disposableMenu)
+        {
+            disposableMenu.Dispose();
+        }
+        
+        return result;
     }
 }
 // Extension method for NativeLibrary.GetExport to simplify marshalling
