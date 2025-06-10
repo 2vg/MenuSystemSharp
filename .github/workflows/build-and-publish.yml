@@ -1,0 +1,123 @@
+name: Build & Publish MenuSystemSharp
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - '.github/workflows/**'
+      - 'images/**'
+      - '*.md'
+
+jobs:
+  setup:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      buildnumber: ${{ steps.buildnumber.outputs.build_number }}
+    steps:
+      - name: Generate build number
+        id: buildnumber
+        uses: onyxmueller/build-tag-number@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Prepare Environment Variables
+        shell: bash
+        run: |
+          echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=${{ needs.setup.outputs.buildnumber }}" >> $GITHUB_ENV
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore MenuSystemSharp.sln
+
+      - name: Build Solution
+        run: |
+          dotnet build MenuSystemSharp.sln -c Release --no-restore /p:Version=1.0.${{ env.BUILD_NUMBER }}
+
+      - name: Create Output Directory Structure
+        run: |
+          mkdir -p BuildOutput/plugins/MenuSystemSharp
+          mkdir -p BuildOutput/shared/MenuSystemSharp.API
+
+      - name: Copy Build Artifacts
+        run: |
+          # Copy MenuSystemSharp.dll to plugins directory
+          cp MenuSystemSharp/bin/Release/net8.0/MenuSystemSharp.dll BuildOutput/plugins/MenuSystemSharp/
+          # Copy MenuSystemSharp.API.dll to shared directory
+          cp MenuSystemSharp.API/bin/Release/net8.0/MenuSystemSharp.API.dll BuildOutput/shared/MenuSystemSharp.API/
+
+      - name: Pack NuGet Packages
+        run: |
+          mkdir -p nupkg
+          # Pack MenuSystemSharp.API as NuGet package
+          dotnet pack MenuSystemSharp.API/MenuSystemSharp.API.csproj -c Release --no-build --output ./nupkg /p:Version=1.0.${{ env.BUILD_NUMBER }}
+
+      - name: Check Artifacts
+        run: |
+          echo "Listing contents of BuildOutput directory"
+          find BuildOutput -type f -exec ls -la {} \;
+          echo "Listing contents of nupkg directory"
+          ls -la ./nupkg/
+
+      - name: Publish to NuGet
+        run: |
+          dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY_MENUSYSTEMSHARP }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create Release Artifact (ZIP) from BuildOutput
+        run: |
+          cd BuildOutput
+          zip -r ../MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip *
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v1.0.${{ env.BUILD_NUMBER }}
+          release_name: MenuSystemSharp v1.0.${{ env.BUILD_NUMBER }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Release Notes for MenuSystemSharp v1.0.${{ env.BUILD_NUMBER }}
+
+            ### Changes:
+            - ${{ github.event.head_commit.message }}
+
+            ### Installation:
+            1. Extract the ZIP file to your CounterStrikeSharp installation directory
+            2. The plugin will be placed in `plugins/MenuSystemSharp/`
+            3. The API library will be placed in `shared/MenuSystemSharp.API/`
+
+            ### NuGet Package:
+            - MenuSystemSharp.API is also available as a NuGet package for developers
+
+            ### Feedback:
+            - If you encounter any issues, please report them [here](https://github.com/${{ github.repository }}/issues).
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip
+          asset_name: MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip
+          asset_content_type: application/zip

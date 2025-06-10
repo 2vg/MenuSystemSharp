@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MenuSystemSharp.API</RootNamespace>
+    <Authors>MenuSystemSharp</Authors>
+    <AssemblyTitle>MenuSystemSharp.API</AssemblyTitle>
+    <Product>MenuSystemSharp.API</Product>
+    <Description>API interface for MenuSystemSharp - C# wrapper for Wend4r's MetaMod Menu System</Description>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <PackageId>MenuSystemSharp.API</PackageId>
+    <PackageTags>counterstrikesharp;menu;api</PackageTags>
+    <RepositoryUrl>https://github.com/2vg/MenuSystemSharp</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.317" />
+  </ItemGroup>
+</Project>

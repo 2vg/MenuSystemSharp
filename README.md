@@ -12,197 +12,120 @@ It is intended to run on the CounterStrikeSharp framework.
 *  Implement resolution switch
 *  Implement save&load resolution processing
 
-## Required
+## Project Structure
 
-*  [roflmuffin/CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp).
-*  [Wend4r/mms2-menu_system](https://github.com/Wend4r/mms2-menu_system)
+### MenuSystemSharp.API
+- **Purpose**: API interface for external plugins
+- **Distribution**: NuGet package
+- **Dependencies**: CounterStrikeSharp.API only
+- **Description**: External plugins reference this API to use MenuSystem functionality
 
-## Build
+### MenuSystemSharp
+- **Purpose**: MenuSystem implementation plugin
+- **Distribution**: Plugin DLL
+- **Dependencies**: MenuSystemSharp.API, CounterStrikeSharp.API
+- **Description**: Provides the actual menu system implementation and registers the implementation with the API interface
 
-There is no release for now, sorry.
-Just clone the repository, then please build it.
+### ExamplePlugin
+- **Purpose**: Sample plugin demonstrating API usage
+- **Dependencies**: MenuSystemSharp.API
+- **Description**: Shows how external plugins can use the API
 
-## Config
+## Architecture
+
+```
+External Plugin
+    ↓ (references)
+MenuSystemSharp.API (NuGet Package)
+    ↑ (implementation registration)
+MenuSystemSharp (Plugin)
+    ↓ (native library calls)
+Wend4r's MetaMod Menu System
+```
+
+## Usage
+
+### Config
 
 Please see: [Wend4r/mms2-menu_system](https://github.com/Wend4r/mms2-menu_system)
 
-## Installation
-
+### 1. Installing MenuSystemSharp Plugin
 1. Install [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
 2. Install [Wend4r's mms2-menu_system](https://github.com/Wend4r/mms2-menu_system)
-3. Build or download MenuSystemSharp plugin
-4. Place the compiled plugin in your CounterStrikeSharp plugins directory
-5. Load the plugin and ensure it detects the menu system
+3. Place the MenuSystemSharp plugin in your server's plugin folder
 
-## Usage for External Plugins
-
-MenuSystemSharp is designed to be used as a dependency by other CounterStrikeSharp plugins. Here's how to use it:
-
-### Basic Usage with MenuSystemHelper
+### 2. Using in External Plugins
+1. Install the `MenuSystemSharp.API` NuGet package
+2. Use the API to create and display menus
 
 ```csharp
-using CounterStrikeSharp.API;
-using CounterStrikeSharp.API.Core;
-using CounterStrikeSharp.API.Modules.Commands;
-using MenuSystemSharp;
+using MenuSystemSharp.API;
 
-public class MyAwesomePlugin : BasePlugin
+// Check if MenuSystem is available
+if (!MenuSystemAPI.IsAvailable)
 {
-    public override void Load(bool hotReload)
-    {
-        AddCommand("css_mymenu", "Show my custom menu", OnMyMenuCommand);
-    }
-
-    private void OnMyMenuCommand(CCSPlayerController? player, CommandInfo command)
-    {
-        if (player == null || !player.IsValid || player.IsBot)
-            return;
-
-        // Check if MenuSystem is available
-        if (!MenuSystemHelper.IsAvailable)
-        {
-            player.PrintToChat("Menu system is not available.");
-            return;
-        }
-
-        try
-        {
-            ShowMainMenu(player);
-        }
-        catch (Exception ex)
-        {
-            player.PrintToChat($"Error creating menu: {ex.Message}");
-        }
-    }
-
-    private void ShowMainMenu(CCSPlayerController player)
-    {
-        // Create menu using helper
-        var menu = MenuSystemHelper.CreateMenu("My Plugin Menu");
-
-        // Add menu items with callbacks
-        MenuSystemHelper.AddItem(menu, "Player Info", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat($"Your name: {selectedPlayer.PlayerName}");
-            selectedPlayer?.PrintToChat($"Your SteamID: {selectedPlayer.SteamID}");
-        });
-
-        MenuSystemHelper.AddItem(menu, "Server Info", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat($"Map: {Server.MapName}");
-        });
-
-        MenuSystemHelper.AddItem(menu, "Sub Menu", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            ShowSubMenu(selectedPlayer);
-        });
-
-        // Add simple item without callback
-        MenuSystemHelper.AddItem(menu, "Disabled Option", MenuItemStyleFlags.Active);
-
-        // Display the menu
-        MenuSystemHelper.DisplayMenu(menu, player);
-    }
-
-    private void ShowSubMenu(CCSPlayerController? player)
-    {
-        if (player == null) return;
-
-        var subMenu = MenuSystemHelper.CreateMenu("Sub Menu");
-
-        MenuSystemHelper.AddItem(subMenu, "Option A", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat("You selected Option A!");
-        });
-
-        MenuSystemHelper.AddItem(subMenu, "Option B", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat("You selected Option B!");
-        });
-
-        MenuSystemHelper.AddItem(subMenu, "Back to Main", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            ShowMainMenu(selectedPlayer);
-        });
-
-        MenuSystemHelper.DisplayMenu(subMenu, player);
-    }
+    Console.WriteLine("MenuSystem is not available");
+    return;
 }
+
+// Create a menu
+var menu = MenuSystemAPI.CreateMenu("My Menu");
+
+// Add menu items
+MenuSystemAPI.Instance.AddItem(menu, "Option 1", (player, menu, itemIndex) =>
+{
+    player?.PrintToChat("Option 1 selected");
+});
+
+// Display the menu
+MenuSystemAPI.DisplayMenu(menu, player);
 ```
 
-### Advanced Usage with Direct API
+## Building
 
-For more control, you can use the direct API:
+```bash
+# Build everything
+dotnet build
 
-```csharp
-using MenuSystemSharp;
+# Build API package only
+dotnet build MenuSystemSharp.API
 
-public class AdvancedMenuPlugin : BasePlugin
-{
-    private IMenuSystem? _menuSystem;
+# Build main plugin only
+dotnet build MenuSystemSharp
 
-    public override void Load(bool hotReload)
-    {
-        // Get the menu system instance
-        _menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
-        
-        if (_menuSystem == null)
-        {
-            Console.WriteLine("MenuSystem not available");
-            return;
-        }
-
-        AddCommand("css_advanced_menu", "Show advanced menu", OnAdvancedMenuCommand);
-    }
-
-    private void OnAdvancedMenuCommand(CCSPlayerController? player, CommandInfo command)
-    {
-        if (player == null || !player.IsValid || _menuSystem == null)
-            return;
-
-        // Get profile system
-        var profileSystem = _menuSystem.GetProfiles();
-        
-        // Use specific profile (or default)
-        var profile = profileSystem.GetProfile("default");
-        if (profile == null)
-        {
-            player.PrintToChat("Menu profile not found.");
-            return;
-        }
-
-        // Create menu instance
-        var menu = _menuSystem.CreateInstance(profile, null);
-        menu.SetTitle("Advanced Menu");
-
-        // Add items with different styles
-        menu.AddItem("Normal Item", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat("Normal item selected!");
-        }, MenuItemStyleFlags.Default);
-
-        menu.AddItem("Control Item", (selectedPlayer, menuInstance, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat("Control item selected!");
-        }, MenuItemStyleFlags.Control | MenuItemStyleFlags.HasNumber);
-
-        // Display with custom parameters
-        _menuSystem.DisplayInstanceToPlayer(menu, player.Slot, 0, 30); // 30 seconds timeout
-    }
-}
+# Build example plugin only
+dotnet build ExamplePlugin
 ```
 
-### Menu Item Styles
+## Creating NuGet Package
 
-Available `MenuItemStyleFlags`:
+```bash
+# Create API package
+dotnet pack MenuSystemSharp.API -c Release
 
-- `Disabled`: no selectable item
-- `Active`: Standard selectable item
-- `HasNumber`: Shows item number
-- `Control`: Control item (like Back/Exit)
-- `Default`: Combination of `Active | HasNumber`
-- `Full`: Combination of `Default | Control`
+# Publish package (to NuGet.org or private feed)
+dotnet nuget push MenuSystemSharp.API/bin/Release/MenuSystemSharp.API.1.0.0.nupkg -s https://api.nuget.org/v3/index.json
+```
 
-## Special Thanks
+## Deployment
 
-* [Wend4r](https://github.com/Wend4r)
+### For Server Administrators
+1. Place `MenuSystemSharp.dll` in the plugins folder
+2. Place `MenuSystemSharp.API.dll` in the shared folder
+
+### For Plugin Developers
+1. Install the `MenuSystemSharp.API` NuGet package
+2. Develop plugins using the API
+
+## License
+
+MIT License
+
+## Contributing
+
+Pull requests and issue reports are welcome.
+
+## Related Links
+
+- [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
+- [Wend4r's MetaMod Menu System](https://github.com/Wend4r/s2u-menu_system)

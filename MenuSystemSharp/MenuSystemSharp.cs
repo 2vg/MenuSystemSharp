@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using CounterStrikeSharp.API.Modules.Memory;
 using Microsoft.Extensions.Logging;
+using MenuSystemSharp.API;
 
 namespace MenuSystemSharp;
 
@@ -82,11 +83,20 @@ public class MenuSystemCSharp : BasePlugin
             Logger.LogDebug("{MenuSystemVersion} found: 0x{Pointer:X}", MENU_SYSTEM_VERSION, menuSystemPtr.Value);
 
             LoadMenuLibrary(menuSystemPtr.Value);
+            
+            // Register API implementation
+            var apiImplementation = new MenuSystemAPIImplementation();
+            MenuSystemAPI.RegisterImplementation(apiImplementation);
+            Logger.LogDebug("MenuSystem API implementation registered");
         });
     }
 
     public override void Unload(bool hotReload)
     {
+        // Unregister API implementation
+        MenuSystemAPI.UnregisterImplementation();
+        Logger.LogDebug("MenuSystem API implementation unregistered");
+        
         Instance = null;
         _nativeLibraryHandle = IntPtr.Zero;
         if (MenuWrapper._staticNativeCallbackDelegateHandle.IsAllocated)
@@ -600,5 +610,112 @@ public static class MenuSystemHelper
     {
         var menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
         return menuSystem?.GetProfiles();
+    }
+}
+
+/// <summary>
+/// Implementation of IMenuAPI that wraps the internal IMenu interface
+/// </summary>
+internal class MenuAPIWrapper(IMenu internalMenu) : IMenuAPI
+{
+    private readonly IMenu _internalMenu = internalMenu ?? throw new ArgumentNullException(nameof(internalMenu));
+
+    public string GetTitle()
+    {
+        return _internalMenu.GetTitle();
+    }
+
+    public void SetTitle(string title)
+    {
+        _internalMenu.SetTitle(title);
+    }
+
+    public int AddItem(string content, API.MenuItemSelectAction onSelectCallback, API.MenuItemStyleFlags style = API.MenuItemStyleFlags.Default)
+    {
+        // Convert API callback to internal callback
+        void internalCallback(CCSPlayerController? player, IMenu menu, int itemIndex)
+        {
+            var apiMenu = new MenuAPIWrapper(menu);
+            onSelectCallback(player, apiMenu, itemIndex);
+        }
+
+        // Convert API style flags to internal style flags
+        var internalStyle = (MenuItemStyleFlags)style;
+        
+        return _internalMenu.AddItem(content, internalCallback, internalStyle);
+    }
+
+    public int AddItem(string content, API.MenuItemStyleFlags style = API.MenuItemStyleFlags.Default)
+    {
+        // Convert API style flags to internal style flags
+        var internalStyle = (MenuItemStyleFlags)style;
+        
+        return _internalMenu.AddItem(content, internalStyle);
+    }
+
+    public int GetCurrentPosition(int playerSlot)
+    {
+        return _internalMenu.GetCurrentPosition(playerSlot);
+    }
+
+    // Internal access for the implementation
+    internal IMenu InternalMenu => _internalMenu;
+}
+
+/// <summary>
+/// Implementation of IMenuSystemAPI that provides the API interface
+/// </summary>
+internal class MenuSystemAPIImplementation : IMenuSystemAPI
+{
+    public bool IsAvailable => MenuSystemCSharp.GetMenuSystemInstance() != null;
+
+    public IMenuAPI CreateMenu(string title)
+    {
+        return CreateMenu(title, "default");
+    }
+
+    public IMenuAPI CreateMenu(string title, string profileName)
+    {
+        var menuSystem = MenuSystemCSharp.GetMenuSystemInstance()
+            ?? throw new InvalidOperationException("MenuSystem is not available. Make sure the MenuSystemCSharp plugin is loaded.");
+        
+        var profileSystem = menuSystem.GetProfiles();
+        var profile = profileSystem.GetProfile(profileName)
+            ?? throw new InvalidOperationException($"Menu profile '{profileName}' not found.");
+        
+        var menu = menuSystem.CreateInstance(profile, null);
+        menu.SetTitle(title);
+        
+        return new MenuAPIWrapper(menu);
+    }
+
+    public bool DisplayMenu(IMenuAPI menu, CCSPlayerController player, int startItem = 0, int displayTime = 0)
+    {
+        var menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
+        if (menuSystem == null || player == null || !player.IsValid || player.IsBot)
+            return false;
+
+        // Extract the internal menu from the API wrapper
+        if (menu is MenuAPIWrapper wrapper)
+        {
+            return menuSystem.DisplayInstanceToPlayer(wrapper.InternalMenu, player.Slot, startItem, displayTime);
+        }
+        
+        return false;
+    }
+
+    public bool CloseMenu(IMenuAPI menu)
+    {
+        var menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
+        if (menuSystem == null)
+            return false;
+
+        // Extract the internal menu from the API wrapper
+        if (menu is MenuAPIWrapper wrapper)
+        {
+            return menuSystem.CloseInstance(wrapper.InternalMenu);
+        }
+        
+        return false;
     }
 }
