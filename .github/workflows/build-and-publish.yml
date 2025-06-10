@@ -5,9 +5,9 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'README.md'
+      - ExamplePlugin/**
+      - 'LICENSE'
       - '.github/workflows/**'
-      - 'images/**'
       - '*.md'
 
 jobs:
