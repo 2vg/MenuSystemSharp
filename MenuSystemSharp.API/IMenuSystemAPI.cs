@@ -33,13 +33,13 @@ public interface IMenuAPI
     /// Gets the title of the menu
     /// </summary>
     string GetTitle();
-    
+
     /// <summary>
     /// Sets the title of the menu
     /// </summary>
     /// <param name="title">The new title</param>
     void SetTitle(string title);
-    
+
     /// <summary>
     /// Adds a menu item with a callback action
     /// </summary>
@@ -48,7 +48,7 @@ public interface IMenuAPI
     /// <param name="style">The item style</param>
     /// <returns>The index of the added item</returns>
     int AddItem(string content, MenuItemSelectAction onSelectCallback, MenuItemStyleFlags style = MenuItemStyleFlags.Default);
-    
+
     /// <summary>
     /// Adds a simple menu item without a callback
     /// </summary>
@@ -56,7 +56,7 @@ public interface IMenuAPI
     /// <param name="style">The item style</param>
     /// <returns>The index of the added item</returns>
     int AddItem(string content, MenuItemStyleFlags style = MenuItemStyleFlags.Default);
-    
+
     /// <summary>
     /// Gets the current position for a player
     /// </summary>
@@ -74,7 +74,7 @@ public interface IMenuSystemAPI
     /// Checks whether the MenuSystem is available
     /// </summary>
     bool IsAvailable { get; }
-    
+
     /// <summary>
     /// Creates a menu using the default profile
     /// </summary>
@@ -82,7 +82,7 @@ public interface IMenuSystemAPI
     /// <returns>The created menu instance</returns>
     /// <exception cref="InvalidOperationException">Thrown if the MenuSystem is not available</exception>
     IMenuAPI CreateMenu(string title);
-    
+
     /// <summary>
     /// Creates a menu using the specified profile
     /// </summary>
@@ -91,7 +91,7 @@ public interface IMenuSystemAPI
     /// <returns>The created menu instance</returns>
     /// <exception cref="InvalidOperationException">Thrown if the MenuSystem or specified profile is not available</exception>
     IMenuAPI CreateMenu(string title, string profileName);
-    
+
     /// <summary>
     /// Displays the menu to a player
     /// </summary>
@@ -101,13 +101,27 @@ public interface IMenuSystemAPI
     /// <param name="displayTime">The display duration in seconds (default: 0 = unlimited)</param>
     /// <returns>True if displayed successfully</returns>
     bool DisplayMenu(IMenuAPI menu, CCSPlayerController player, int startItem = 0, int displayTime = 0);
-    
+
     /// <summary>
     /// Closes the specified menu
     /// </summary>
     /// <param name="menu">The menu to close</param>
     /// <returns>True if closed successfully</returns>
     bool CloseMenu(IMenuAPI menu);
+
+    /// <summary>
+    /// Gets the active menu index for a player
+    /// </summary>
+    /// <param name="player">The target player</param>
+    /// <returns>The active menu index, or -1 if no active menu</returns>
+    int GetActiveMenuIndex(CCSPlayerController player);
+
+    /// <summary>
+    /// Gets the active menu instance for a player
+    /// </summary>
+    /// <param name="player">The target player</param>
+    /// <returns>The active menu instance, or null if no active menu</returns>
+    IMenuAPI? GetActiveMenu(CCSPlayerController player);
 }
 
 /// <summary>
@@ -116,12 +130,12 @@ public interface IMenuSystemAPI
 public static class MenuSystemAPI
 {
     private static IMenuSystemAPI? _instance;
-    
+
     /// <summary>
     /// Gets the current MenuSystem API instance
     /// </summary>
     public static IMenuSystemAPI? Instance => _instance;
-    
+
     /// <summary>
     /// Registers the MenuSystem API implementation (called by the MenuSystemSharp plugin)
     /// </summary>
@@ -130,7 +144,7 @@ public static class MenuSystemAPI
     {
         _instance = implementation;
     }
-    
+
     /// <summary>
     /// Unregisters the MenuSystem API implementation (called by the MenuSystemSharp plugin)
     /// </summary>
@@ -138,12 +152,12 @@ public static class MenuSystemAPI
     {
         _instance = null;
     }
-    
+
     /// <summary>
     /// Checks whether the MenuSystem is available
     /// </summary>
     public static bool IsAvailable => _instance?.IsAvailable ?? false;
-    
+
     /// <summary>
     /// Creates a menu using the default profile
     /// </summary>
@@ -154,10 +168,10 @@ public static class MenuSystemAPI
     {
         if (_instance == null)
             throw new InvalidOperationException("MenuSystem API is not available. Make sure the MenuSystemSharp plugin is loaded.");
-        
+
         return _instance.CreateMenu(title);
     }
-    
+
     /// <summary>
     /// Creates a menu using the specified profile
     /// </summary>
@@ -169,10 +183,10 @@ public static class MenuSystemAPI
     {
         if (_instance == null)
             throw new InvalidOperationException("MenuSystem API is not available. Make sure the MenuSystemSharp plugin is loaded.");
-        
+
         return _instance.CreateMenu(title, profileName);
     }
-    
+
     /// <summary>
     /// Displays the menu to a player
     /// </summary>
@@ -185,7 +199,7 @@ public static class MenuSystemAPI
     {
         return _instance?.DisplayMenu(menu, player, startItem, displayTime) ?? false;
     }
-    
+
     /// <summary>
     /// Closes the specified menu
     /// </summary>
@@ -194,5 +208,25 @@ public static class MenuSystemAPI
     public static bool CloseMenu(IMenuAPI menu)
     {
         return _instance?.CloseMenu(menu) ?? false;
+    }
+
+    /// <summary>
+    /// Gets the active menu index for a player
+    /// </summary>
+    /// <param name="player">The target player</param>
+    /// <returns>The active menu index, or -1 if no active menu</returns>
+    public static int GetActiveMenuIndex(CCSPlayerController player)
+    {
+        return _instance?.GetActiveMenuIndex(player) ?? -1;
+    }
+
+    /// <summary>
+    /// Gets the active menu instance for a player
+    /// </summary>
+    /// <param name="player">The target player</param>
+    /// <returns>The active menu instance, or null if no active menu</returns>
+    public static IMenuAPI? GetActiveMenu(CCSPlayerController player)
+    {
+        return _instance?.GetActiveMenu(player);
     }
 }

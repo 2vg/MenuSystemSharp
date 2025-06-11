@@ -71,7 +71,7 @@ public class MenuSystemCSharp : BasePlugin
     public override void Load(bool hotReload)
     {
         Instance = this;
-        
+
         RegisterListener<Listeners.OnMetamodAllPluginsLoaded>(() =>
         {
             IntPtr? menuSystemPtr = Utilities.MetaFactory(MENU_SYSTEM_VERSION);
@@ -83,7 +83,7 @@ public class MenuSystemCSharp : BasePlugin
             Logger.LogDebug("{MenuSystemVersion} found: 0x{Pointer:X}", MENU_SYSTEM_VERSION, menuSystemPtr.Value);
 
             LoadMenuLibrary(menuSystemPtr.Value);
-            
+
             // Register API implementation
             var apiImplementation = new MenuSystemAPIImplementation();
             MenuSystemAPI.RegisterImplementation(apiImplementation);
@@ -96,7 +96,7 @@ public class MenuSystemCSharp : BasePlugin
         // Unregister API implementation
         MenuSystemAPI.UnregisterImplementation();
         Logger.LogDebug("MenuSystem API implementation unregistered");
-        
+
         Instance = null;
         _nativeLibraryHandle = IntPtr.Zero;
         if (MenuWrapper._staticNativeCallbackDelegateHandle.IsAllocated)
@@ -113,6 +113,9 @@ public interface IMenuSystem
     IMenu CreateInstance(IMenuProfile? profile, IMenuHandler? handler);
     bool DisplayInstanceToPlayer(IMenu menu, int playerSlot, int startItem = 0, int displayTime = 0);
     bool CloseInstance(IMenu menu);
+
+    int GetActiveMenuIndex(int playerSlot);
+    IMenu? GetActiveMenu(int playerSlot);
 }
 
 public interface IMenuProfileSystem
@@ -137,7 +140,7 @@ public class MenuProfileSystemWrapper : IMenuProfileSystem
         {
             throw new ArgumentNullException(nameof(instancePtr), "MenuProfileSystem instance pointer cannot be null.");
         }
-        
+
         _getProfileFunction = VirtualFunction.Create<IntPtr, string, IntPtr>(InstancePtr, 0);
         _addOrReplaceProfileFunction = VirtualFunction.CreateVoid<IntPtr, string, IntPtr>(InstancePtr, 1);
         _getEntityKeyValuesAllocatorFunction = VirtualFunction.Create<IntPtr, IntPtr>(InstancePtr, 2);
@@ -148,7 +151,7 @@ public class MenuProfileSystemWrapper : IMenuProfileSystem
         IntPtr profilePtr = _getProfileFunction.Invoke(InstancePtr, name);
         if (profilePtr == IntPtr.Zero)
             return null;
-        
+
         return new MenuProfileWrapper(profilePtr);
     }
 
@@ -218,7 +221,7 @@ public class MenuWrapper : IMenu, IDisposable
     {
         if (_exportsInitialized)
             return;
-        
+
         _exportsInitialized = true;
 
         if (libraryHandle == IntPtr.Zero)
@@ -285,7 +288,7 @@ public class MenuWrapper : IMenu, IDisposable
         {
             if (!contextHandle.IsAllocated || contextHandle.Target is not MenuItemCallbackContext context)
                 return;
-            
+
             CCSPlayerController? player = Utilities.GetPlayerFromSlot(playerSlot);
             context.Callback(player, context.MenuInstance, itemIndex);
         }
@@ -299,7 +302,7 @@ public class MenuWrapper : IMenu, IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void NativeItemSelectCallbackDelegate(IntPtr menuInstance, int playerSlot, int itemIndex, int itemOnPage, IntPtr callbackContextHandle);
-    
+
     private static readonly IntPtr _staticNativeCallbackPointer;
     internal static GCHandle _staticNativeCallbackDelegateHandle;
 
@@ -321,7 +324,7 @@ public class MenuWrapper : IMenu, IDisposable
         InstancePtr = instancePtr;
         if (InstancePtr == IntPtr.Zero)
             throw new ArgumentNullException(nameof(instancePtr));
-        
+
         _getProfileFunction = VirtualFunction.Create<IntPtr, IntPtr>(InstancePtr, 0);
         _applyProfileFunction = VirtualFunction.Create<IntPtr, int, IntPtr, bool>(InstancePtr, 1);
         _getHandlerFunction = VirtualFunction.Create<IntPtr, IntPtr>(InstancePtr, 2);
@@ -333,7 +336,7 @@ public class MenuWrapper : IMenu, IDisposable
         IntPtr profilePtr = _getProfileFunction.Invoke(InstancePtr);
         if (profilePtr == IntPtr.Zero)
             return null;
-        
+
         return new MenuProfileWrapper(profilePtr);
     }
 
@@ -348,7 +351,7 @@ public class MenuWrapper : IMenu, IDisposable
         IntPtr handlerPtr = _getHandlerFunction.Invoke(InstancePtr);
         if (handlerPtr == IntPtr.Zero)
             return null;
-        
+
         throw new NotImplementedException("Menu.GetHandler needs MenuHandlerWrapper and callback strategy.");
     }
 
@@ -376,19 +379,19 @@ public class MenuWrapper : IMenu, IDisposable
         if (_menuAddItemNative == null) throw new InvalidOperationException("Menu_AddItem (native) not initialized.");
         var context = new MenuItemCallbackContext(onSelectCallback, this);
         GCHandle contextHandle = GCHandle.Alloc(context, GCHandleType.Normal);
-        
+
         _allocatedHandles.Add(contextHandle);
-        
+
         IntPtr pContextGCHandle = GCHandle.ToIntPtr(contextHandle);
         int itemId = _menuAddItemNative(InstancePtr, style, content, _staticNativeCallbackPointer, pContextGCHandle);
-        
+
         if (itemId < 0)
         {
             _allocatedHandles.Remove(contextHandle);
             if (contextHandle.IsAllocated)
                 contextHandle.Free();
         }
-        
+
         return itemId;
     }
 
@@ -450,7 +453,7 @@ public class MenuProfileWrapper : IMenuProfile
         InstancePtr = instancePtr;
         if (InstancePtr == IntPtr.Zero)
             throw new ArgumentNullException(nameof(instancePtr));
-        
+
         // IMenuProfile vtable:
         // 0: GetDisplayName() const CUtlString&
         // 1: GetDescription() const CUtlString&
@@ -490,7 +493,7 @@ public class MenuSystemWrapper : IMenuSystem
         _instancePtr = instancePtr;
         if (_instancePtr == IntPtr.Zero)
             throw new ArgumentNullException(nameof(instancePtr));
-        
+
         _getPlayerFunction = VirtualFunction.Create<IntPtr, int, IntPtr>(_instancePtr, 10);
         _getProfilesSystemFunction = VirtualFunction.Create<IntPtr, IntPtr>(_instancePtr, 11);
         _createInstanceFunction = VirtualFunction.Create<IntPtr, IntPtr, IntPtr, IntPtr>(_instancePtr, 12);
@@ -505,7 +508,7 @@ public class MenuSystemWrapper : IMenuSystem
         IntPtr profileSystemPtr = _getProfilesSystemFunction.Invoke(_instancePtr);
         if (profileSystemPtr == IntPtr.Zero)
             throw new InvalidOperationException("GetProfiles returned null.");
-        
+
         return new MenuProfileSystemWrapper(profileSystemPtr);
     }
 
@@ -514,10 +517,10 @@ public class MenuSystemWrapper : IMenuSystem
         IntPtr profilePtr = (profile as IWrapperWithInstancePtr)?.InstancePtr ?? IntPtr.Zero;
         IntPtr handlerPtr = (handler as IWrapperWithInstancePtr)?.InstancePtr ?? IntPtr.Zero;
         IntPtr menuPtr = _createInstanceFunction.Invoke(_instancePtr, profilePtr, handlerPtr);
-        
+
         if (menuPtr == IntPtr.Zero)
             throw new InvalidOperationException("Native CreateInstance returned null.");
-        
+
         return new MenuWrapper(menuPtr);
     }
 
@@ -526,7 +529,7 @@ public class MenuSystemWrapper : IMenuSystem
         IntPtr menuPtr = (menu as IWrapperWithInstancePtr)?.InstancePtr ?? IntPtr.Zero;
         if (menuPtr == IntPtr.Zero && menu != null)
             return false;
-        
+
         return _displayInstanceToPlayerFunction.Invoke(_instancePtr, menuPtr, playerSlot, startItem, displayTime);
     }
 
@@ -535,16 +538,61 @@ public class MenuSystemWrapper : IMenuSystem
         IntPtr menuPtr = (menu as IWrapperWithInstancePtr)?.InstancePtr ?? IntPtr.Zero;
         if (menuPtr == IntPtr.Zero && menu != null)
             return false;
-        
+
         bool result = _closeInstanceFunction.Invoke(_instancePtr, menuPtr);
-        
+
         // Dispose the menu wrapper to free GCHandles
         if (result && menu is IDisposable disposableMenu)
         {
             disposableMenu.Dispose();
         }
-        
+
         return result;
+    }
+
+    public int GetActiveMenuIndex(int playerSlot)
+    {
+        IntPtr playerPtr = _getPlayerFunction.Invoke(_instancePtr, playerSlot);
+        if (playerPtr == IntPtr.Zero)
+            return -1; // MENU_INVALID_INDEX
+
+        var getActiveMenuIndexFunction = VirtualFunction.Create<IntPtr, int>(playerPtr, 0);
+        return getActiveMenuIndexFunction.Invoke(playerPtr);
+    }
+
+    public IMenu? GetActiveMenu(int playerSlot)
+    {
+        IntPtr playerPtr = _getPlayerFunction.Invoke(_instancePtr, playerSlot);
+        if (playerPtr == IntPtr.Zero)
+            return null;
+
+        var getActiveMenuIndexFunction = VirtualFunction.Create<IntPtr, int>(playerPtr, 0);
+        int activeMenuIndex = getActiveMenuIndexFunction.Invoke(playerPtr);
+
+        if (activeMenuIndex < 0) // MENU_INVALID_INDEX
+            return null;
+
+        var getMenusFunction = VirtualFunction.Create<IntPtr, IntPtr>(playerPtr, 1);
+        IntPtr menusVectorPtr = getMenusFunction.Invoke(playerPtr);
+
+        if (menusVectorPtr == IntPtr.Zero)
+            return null;
+
+        IntPtr dataPtr = Marshal.ReadIntPtr(menusVectorPtr);
+        int count = Marshal.ReadInt32(menusVectorPtr + IntPtr.Size);
+
+        if (activeMenuIndex >= count || dataPtr == IntPtr.Zero)
+            return null;
+
+        int menuDataSize = 8 + IntPtr.Size;
+        IntPtr menuDataPtr = dataPtr + (activeMenuIndex * menuDataSize);
+
+        IntPtr menuInstancePtr = Marshal.ReadIntPtr(menuDataPtr + 8);
+
+        if (menuInstancePtr == IntPtr.Zero)
+            return null;
+
+        return new MenuWrapper(menuInstancePtr);
     }
 }
 // Extension method for NativeLibrary.GetExport to simplify marshalling
@@ -693,7 +741,7 @@ internal class MenuAPIWrapper(IMenu internalMenu) : IMenuAPI
 
         // Convert API style flags to internal style flags
         var internalStyle = (MenuItemStyleFlags)style;
-        
+
         return _internalMenu.AddItem(content, internalCallback, internalStyle);
     }
 
@@ -701,7 +749,7 @@ internal class MenuAPIWrapper(IMenu internalMenu) : IMenuAPI
     {
         // Convert API style flags to internal style flags
         var internalStyle = (MenuItemStyleFlags)style;
-        
+
         return _internalMenu.AddItem(content, internalStyle);
     }
 
@@ -730,14 +778,14 @@ internal class MenuSystemAPIImplementation : IMenuSystemAPI
     {
         var menuSystem = MenuSystemCSharp.GetMenuSystemInstance()
             ?? throw new InvalidOperationException("MenuSystem is not available. Make sure the MenuSystemCSharp plugin is loaded.");
-        
+
         var profileSystem = menuSystem.GetProfiles();
         var profile = profileSystem.GetProfile(profileName)
             ?? throw new InvalidOperationException($"Menu profile '{profileName}' not found.");
-        
+
         var menu = menuSystem.CreateInstance(profile, null);
         menu.SetTitle(title);
-        
+
         return new MenuAPIWrapper(menu);
     }
 
@@ -752,7 +800,7 @@ internal class MenuSystemAPIImplementation : IMenuSystemAPI
         {
             return menuSystem.DisplayInstanceToPlayer(wrapper.InternalMenu, player.Slot, startItem, displayTime);
         }
-        
+
         return false;
     }
 
@@ -767,7 +815,29 @@ internal class MenuSystemAPIImplementation : IMenuSystemAPI
         {
             return menuSystem.CloseInstance(wrapper.InternalMenu);
         }
-        
+
         return false;
+    }
+
+    public int GetActiveMenuIndex(CCSPlayerController player)
+    {
+        var menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
+        if (menuSystem == null || player == null || !player.IsValid || player.IsBot)
+            return -1;
+
+        return menuSystem.GetActiveMenuIndex(player.Slot);
+    }
+
+    public IMenuAPI? GetActiveMenu(CCSPlayerController player)
+    {
+        var menuSystem = MenuSystemCSharp.GetMenuSystemInstance();
+        if (menuSystem == null || player == null || !player.IsValid || player.IsBot)
+            return null;
+
+        var activeMenu = menuSystem.GetActiveMenu(player.Slot);
+        if (activeMenu == null)
+            return null;
+
+        return new MenuAPIWrapper(activeMenu);
     }
 }
