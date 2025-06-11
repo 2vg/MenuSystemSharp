@@ -58,27 +58,113 @@ Please see: [Wend4r/mms2-menu_system](https://github.com/Wend4r/mms2-menu_system
 1. Install the `MenuSystemSharp.API` NuGet package
 2. Use the API to create and display menus
 
+### 3. Example
+
 ```csharp
+using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Core.Attributes.Registration;
+using CounterStrikeSharp.API.Modules.Commands;
 using MenuSystemSharp.API;
 
-// Check if MenuSystem is available
-if (!MenuSystemAPI.IsAvailable)
+[ConsoleCommand("css_mymenu", "Opens a custom menu")]
+public void OnMyMenuCommand(CCSPlayerController? player, CommandInfo commandInfo)
 {
-    Console.WriteLine("MenuSystem is not available");
-    return;
+    if (player == null || !player.IsValid || player.IsBot)
+        return;
+
+    if (!MenuSystemAPI.IsAvailable)
+    {
+        player.PrintToChat("MenuSystem is not available. Make sure MenuSystemSharp plugin is loaded.");
+        return;
+    }
+
+    try
+    {
+        var menu = MenuSystemAPI.CreateMenu("My Custom Menu");
+
+        menu.AddItem("Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            selectedPlayer?.PrintToChat($"You selected Option 1 (index: {itemIndex})");
+        });
+
+        menu.AddItem("Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            selectedPlayer?.PrintToChat("You selected Option 2");
+        });
+
+        menu.AddItem("Submenu", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            if (selectedPlayer != null)
+            {
+                ShowSubmenu(selectedPlayer);
+            }
+        });
+
+        menu.AddItem("Close Menu", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            MenuSystemAPI.CloseMenu(selectedMenu);
+            selectedPlayer?.PrintToChat("Menu closed");
+        });
+
+        if (MenuSystemAPI.DisplayMenu(menu, player))
+        {
+            Console.WriteLine($"Menu displayed to {player.PlayerName}");
+        }
+        else
+        {
+            player.PrintToChat("Failed to display menu");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error creating menu: {ex.Message}");
+        player.PrintToChat("Error creating menu");
+    }
 }
 
-// Create a menu
-var menu = MenuSystemAPI.CreateMenu("My Menu");
-
-// Add menu items
-MenuSystemAPI.Instance.AddItem(menu, "Option 1", (player, menu, itemIndex) =>
+private void ShowSubmenu(CCSPlayerController player)
 {
-    player?.PrintToChat("Option 1 selected");
-});
+    try
+    {
+        var submenu = MenuSystemAPI.CreateMenu("Submenu");
 
-// Display the menu
-MenuSystemAPI.DisplayMenu(menu, player);
+        submenu.AddItem("Submenu Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            selectedPlayer?.PrintToChat("You selected Submenu Option 1");
+        });
+
+        submenu.AddItem("Submenu Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+        {
+            selectedPlayer?.PrintToChat("You selected Submenu Option 2");
+        });
+
+        MenuSystemAPI.DisplayMenu(submenu, player);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error creating submenu: {ex.Message}");
+        player.PrintToChat("Error creating submenu");
+    }
+}
+```
+
+### 4. Advanced Example
+
+```csharp
+// Create a menu with custom profile
+var menu = MenuSystemAPI.CreateMenu("Custom Menu", "my_profile");
+
+// Add items with different styles
+menu.AddItem("Active Item", callback, MenuItemStyleFlags.Active);
+menu.AddItem("Disabled Item", callback, MenuItemStyleFlags.Disabled);
+menu.AddItem("Control Item", callback, MenuItemStyleFlags.Control);
+
+// Display menu with custom parameters (auto-close after 10 seconds)
+MenuSystemAPI.DisplayMenu(menu, player, startItem: 0, displayTime: 10);
+
+// Get active menu information
+int activeMenuIndex = MenuSystemAPI.GetActiveMenuIndex(player);
+var activeMenu = MenuSystemAPI.GetActiveMenu(player);
 ```
 
 ## Building
