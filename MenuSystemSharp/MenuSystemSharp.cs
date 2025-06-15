@@ -349,29 +349,16 @@ internal class MenuSystemImpl : IMenuSystem
             {
                 try
                 {
-                    Console.WriteLine($"[C# DEBUG] Native callback called - Menu: 0x{pMenu:X}, Slot: {aSlot}, Item: {iItem}, ItemOnPage: {iItemOnPage}");
-
                     // Find the menu instance
                     if (_menuInstances.TryGetValue(pMenu, out var menuInstance))
                     {
-                        Console.WriteLine($"[C# DEBUG] Found menu instance");
-
                         // Convert slot to player controller
                         var players = Utilities.GetPlayers();
                         var player = players.FirstOrDefault(p => p.Slot == aSlot);
                         if (player != null)
                         {
-                            Console.WriteLine($"[C# DEBUG] Found player: {player.PlayerName}, calling handler");
                             handler(menuInstance, player, iItem, iItemOnPage, pData);
                         }
-                        else
-                        {
-                            Console.WriteLine($"[C# DEBUG] Player not found for slot {aSlot}");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[C# DEBUG] Menu instance not found for 0x{pMenu:X}");
                     }
                 }
                 catch (Exception ex)
@@ -389,9 +376,7 @@ internal class MenuSystemImpl : IMenuSystem
             }
             _callbackHandles[menuPtr].Add(gcHandle);
 
-            Console.WriteLine($"[C# DEBUG] Adding menu item with handler - Menu: 0x{menuPtr:X}, Content: {content}");
             var result = _menuAddItemWithCSharpHandler(menuPtr, styleFlags, contentPtr, nativeCallback, data);
-            Console.WriteLine($"[C# DEBUG] Menu item added with position: {result}");
 
             return result;
         }
