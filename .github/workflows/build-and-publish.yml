@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
     paths-ignore:
       - ExamplePlugin/**
       - 'LICENSE'
@@ -18,6 +21,9 @@ jobs:
     outputs:
       buildnumber: ${{ steps.buildnumber.outputs.build_number }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
       - name: Generate build number
         id: buildnumber
         uses: onyxmueller/build-tag-number@v1
@@ -27,8 +33,29 @@ jobs:
   build:
     needs: setup
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore MenuSystemSharp.sln
+
+      - name: Build Solution
+        run: dotnet build MenuSystemSharp.sln -c Release --no-restore
+
+  publish:
+    needs:
+      - setup
+      - build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Prepare Environment Variables
         shell: bash
@@ -87,14 +114,15 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v1.0.${{ env.BUILD_NUMBER }}
-          release_name: MenuSystemSharp v1.0.${{ env.BUILD_NUMBER }}
+          name: MenuSystemSharp v1.0.${{ env.BUILD_NUMBER }}
           draft: false
           prerelease: false
+          files: ./MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip
           body: |
             ## Release Notes for MenuSystemSharp v1.0.${{ env.BUILD_NUMBER }}
 
@@ -111,13 +139,3 @@ jobs:
 
             ### Feedback:
             - If you encounter any issues, please report them [here](https://github.com/${{ github.repository }}/issues).
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip
-          asset_name: MenuSystemSharp-v${{ env.BUILD_NUMBER }}.zip
-          asset_content_type: application/zip
