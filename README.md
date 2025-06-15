@@ -7,6 +7,12 @@
 MenuSystemSharp is a library and sample plugin designed to enable the use of [Wend4r's mms2-menu_system](https://github.com/Wend4r/mms2-menu_system), a MetaMod plugin for Counter-Strike 2 (CS2), from C#.
 It is intended to run on the CounterStrikeSharp framework.
 
+## Warning
+
+Use my [mms2-menu_system](https://github.com/2vg/mms2-menu_system) for now.
+
+Because there are some exports added to the original implementation, so MenuSystemSharp needs them.
+
 ## TODO
 
 *  Implement resolution switch
@@ -51,7 +57,7 @@ Please see: [Wend4r/mms2-menu_system](https://github.com/Wend4r/mms2-menu_system
 
 ### 1. Installing MenuSystemSharp Plugin
 1. Install [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)
-2. Install [Wend4r's mms2-menu_system](https://github.com/Wend4r/mms2-menu_system)
+2. Install [My mms2-menu_system](https://github.com/2vg/mms2-menu_system)
 3. Place the MenuSystemSharp plugin in your server's plugin folder
 
 ### 2. Using in External Plugins
