@@ -17,6 +17,7 @@ This package provides an API interface for external plugins to use MenuSystemSha
 ### 2. Basic Usage Example
 
 ```csharp
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
@@ -24,6 +25,23 @@ using MenuSystemSharp.API;
 
 public class MyPlugin : BasePlugin
 {
+    private IMenuSystem? _menuSystem;
+
+    public override void OnAllPluginsLoaded(bool hotReload)
+    {
+        RegisterListener<Listeners.OnMetamodAllPluginsLoaded>(() =>
+        {
+            if (MenuSystem.Instance == null)
+            {
+                throw new InvalidOperationException("MenuSystemSharp plugin is not loaded. Please ensure it is installed and loaded before this plugin.");
+            }
+            else
+            {
+                _menuSystem = MenuSystem.Instance;
+            }
+        });
+    }
+
     [ConsoleCommand("css_testmenu", "Opens a test menu")]
     public void OnTestMenuCommand(CCSPlayerController? player, CommandInfo commandInfo)
     {
@@ -31,7 +49,7 @@ public class MyPlugin : BasePlugin
             return;
 
         // Check if MenuSystem is available
-        if (!MenuSystemAPI.IsAvailable)
+        if (_menuSystem == null)
         {
             player.PrintToChat("MenuSystem is not available. Make sure MenuSystemSharp plugin is loaded.");
             return;
@@ -39,28 +57,28 @@ public class MyPlugin : BasePlugin
 
         try
         {
-            // Create a menu
-            var menu = MenuSystemAPI.CreateMenu("Test Menu");
+            var menu = _menuSystem.CreateMenu();
+            menu.Title = "Test Menu";
 
             // Add menu items with callbacks
-            menu.AddItem("Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 1", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                selectedPlayer?.PrintToChat($"You selected Option 1 (index: {itemIndex})");
+                selectedPlayer.PrintToChat($"You selected Option 1 (position: {itemPosition})");
             });
 
-            menu.AddItem("Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 2", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                selectedPlayer?.PrintToChat("You selected Option 2");
+                selectedPlayer.PrintToChat("You selected Option 2");
             });
 
-            menu.AddItem("Close", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Close", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                MenuSystemAPI.CloseMenu(selectedMenu);
-                selectedPlayer?.PrintToChat("Menu closed");
+                menu.Close();
+                selectedPlayer.PrintToChat("Menu closed");
             });
 
             // Display the menu to the player
-            if (!MenuSystemAPI.DisplayMenu(menu, player))
+            if (!menu.DisplayToPlayer(player))
             {
                 player.PrintToChat("Failed to display menu");
             }
@@ -77,22 +95,31 @@ public class MyPlugin : BasePlugin
 ### 3. Advanced Usage Examples
 
 ```csharp
-// Create menu with custom profile
-var menu = MenuSystemAPI.CreateMenu("Custom Menu", "my_profile");
-
-// Add items with different styles
-menu.AddItem("Normal Item", callback, MenuItemStyleFlags.Default);
-menu.AddItem("Disabled Item", callback, MenuItemStyleFlags.Disabled);
-menu.AddItem("Control Item", callback, MenuItemStyleFlags.Control);
-
-// Display with custom parameters
-MenuSystemAPI.DisplayMenu(menu, player, startItem: 2, displayTime: 15);
-
-// Check active menu
-var activeMenu = MenuSystemAPI.GetActiveMenu(player);
-if (activeMenu != null)
+// Get a custom profile
+var customProfile = _menuSystem.GetProfile("my_profile");
+if (customProfile != null)
 {
-    Console.WriteLine($"Player has active menu: {activeMenu.GetTitle()}");
+    // Create menu with custom profile
+    var menu = _menuSystem.CreateMenu(customProfile);
+    menu.Title = "Custom Menu";
+
+    // Add items with different styles
+    menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Normal Item", callback);
+    menu.AddItem(MenuItemStyleFlags.Disabled, "Disabled Item", callback);
+    menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.Control, "Control Item", callback);
+
+    // Set item controls
+    menu.ItemControls = MenuItemControlFlags.Back | MenuItemControlFlags.Next | MenuItemControlFlags.Exit;
+
+    // Display with custom parameters
+    menu.DisplayToPlayer(player, startItem: 2, displayTime: 15);
+
+    // Check active menu
+    var activeMenu = _menuSystem.GetPlayerActiveMenu(player);
+    if (activeMenu != null)
+    {
+        Console.WriteLine($"Player has active menu: {activeMenu.Title}");
+    }
 }
 ```
 
@@ -103,76 +130,101 @@ if (activeMenu != null)
 
 ## API Reference
 
-### MenuSystemAPI
+### MenuSystem
 
-Static class that provides access to the menu system.
+Static class that provides access to the menu system instance.
 
 #### Properties
 
-- `IsAvailable`: Indicates whether MenuSystem is available
-- `Instance`: Gets the MenuSystemAPI instance
+- `Instance`: Gets the menu system instance (`IMenuSystem?`)
 
 #### Methods
 
-- `CreateMenu(string title)`: Creates a menu with the default profile
-  - **Parameters**: `title` - The menu title
-  - **Returns**: `IMenuAPI` - The created menu instance
-  - **Throws**: `InvalidOperationException` if MenuSystem is not available
+- `SetInstance(IMenuSystem? instance)`: Sets the menu system instance (internal use only)
 
-- `CreateMenu(string title, string profileName)`: Creates a menu with the specified profile
-  - **Parameters**: `title` - The menu title, `profileName` - The profile name to use
-  - **Returns**: `IMenuAPI` - The created menu instance
-  - **Throws**: `InvalidOperationException` if MenuSystem or profile is not available
+### IMenuSystem
 
-- `DisplayMenu(IMenuAPI menu, CCSPlayerController player, int startItem = 0, int displayTime = 0)`: Displays a menu to a player
-  - **Parameters**: `menu` - The menu to display, `player` - The target player, `startItem` - Starting item index (default: 0), `displayTime` - Display duration in seconds (default: 0 = unlimited)
-  - **Returns**: `bool` - True if displayed successfully
+Interface for the menu system.
 
-- `CloseMenu(IMenuAPI menu)`: Closes the specified menu
-  - **Parameters**: `menu` - The menu to close
-  - **Returns**: `bool` - True if closed successfully
+#### Properties
 
-- `GetActiveMenuIndex(CCSPlayerController player)`: Gets the active menu index for a player
-  - **Parameters**: `player` - The target player
-  - **Returns**: `int` - The active menu index, or -1 if no active menu
+- `IsAvailable`: Indicates whether the menu system is available
 
-- `GetActiveMenu(CCSPlayerController player)`: Gets the active menu instance for a player
-  - **Parameters**: `player` - The target player
-  - **Returns**: `IMenuAPI?` - The active menu instance, or null if no active menu
+#### Methods
 
-### IMenuAPI
+- `GetProfile(string profileName = "default")`: Gets a menu profile by name
+  - **Parameters**: `profileName` - The name of the profile (default: "default")
+  - **Returns**: `IMenuProfile?` - The menu profile, or null if not found
+
+-  `CreateMenu()`: Creates a new menu instance, using the default profile
+  - **Returns**: `IMenuInstance` - A new menu instance
+
+- `CreateMenu(IMenuProfile profile)`: Creates a new menu instance
+  - **Parameters**: `profile` - The profile to use for the menu
+  - **Returns**: `IMenuInstance` - A new menu instance
+
+- `GetPlayerActiveMenu(CCSPlayerController player)`: Gets the currently active menu for a player
+  - **Parameters**: `player` - The player
+  - **Returns**: `IMenuInstance?` - The active menu instance, or null if no menu is active
+
+### IMenuProfile
+
+Interface for menu profiles.
+
+#### Properties
+
+- `Name`: Gets the profile name
+- `NativePtr`: Gets the native pointer to the profile
+
+### IMenuInstance
 
 Interface for menu instances.
 
+#### Properties
+
+- `Title`: Gets or sets the menu title
+- `NativePtr`: Gets the native pointer to the menu instance
+- `ItemControls`: Gets or sets the item control flags
+
 #### Methods
 
-- `GetTitle()`: Gets the current menu title
-  - **Returns**: `string` - The menu title
+- `AddItem(MenuItemStyleFlags styleFlags, string content, MenuItemHandler? handler = null, IntPtr data = default)`: Adds an item to the menu
+  - **Parameters**: `styleFlags` - Style flags for the item, `content` - The text content of the item, `handler` - Handler to call when item is selected, `data` - Custom data to associate with the item
+  - **Returns**: `int` - The position of the added item
 
-- `SetTitle(string title)`: Sets the menu title
-  - **Parameters**: `title` - The new title
+- `RemoveItem(int itemPosition)`: Removes an item from the menu
+  - **Parameters**: `itemPosition` - The position of the item to remove
 
-- `AddItem(string content, MenuItemSelectAction callback, MenuItemStyleFlags style = MenuItemStyleFlags.Default)`: Adds an item with a callback
-  - **Parameters**: `content` - The item text, `callback` - The action to invoke when selected, `style` - The item style (default: Default)
-  - **Returns**: `int` - The index of the added item
+- `GetItemStyles(int itemPosition)`: Gets the style flags of an item
+  - **Parameters**: `itemPosition` - The position of the item
+  - **Returns**: `MenuItemStyleFlags` - The style flags of the item
 
-- `AddItem(string content, MenuItemStyleFlags style = MenuItemStyleFlags.Default)`: Adds a simple item without callback
-  - **Parameters**: `content` - The item text, `style` - The item style (default: Default)
-  - **Returns**: `int` - The index of the added item
+- `GetItemContent(int itemPosition)`: Gets the content of an item
+  - **Parameters**: `itemPosition` - The position of the item
+  - **Returns**: `string` - The content of the item
 
-- `GetCurrentPosition(int playerSlot)`: Gets the current position for a player
-  - **Parameters**: `playerSlot` - The player slot
+- `GetCurrentPosition(CCSPlayerController player)`: Gets the current position for a player
+  - **Parameters**: `player` - The player
   - **Returns**: `int` - The current position
 
-### MenuItemSelectAction
+- `DisplayToPlayer(CCSPlayerController player, int startItem = 0, int displayTime = 0)`: Displays the menu to a player
+  - **Parameters**: `player` - The player to display the menu to, `startItem` - The starting item position, `displayTime` - How long to display the menu (0 = forever)
+  - **Returns**: `bool` - True if the menu was displayed successfully
 
-Delegate for menu item selection callbacks.
+- `Close()`: Closes the menu
+  - **Returns**: `bool` - True if the menu was closed successfully
+
+- `Dispose()`: Disposes the menu instance
+
+### MenuItemHandler
+
+Delegate for menu item handlers.
 
 ```csharp
-public delegate void MenuItemSelectAction(CCSPlayerController? player, IMenuAPI menu, int itemIndex);
+public delegate void MenuItemHandler(IMenuInstance menu, CCSPlayerController player, int itemPosition, int itemOnPage, IntPtr data);
 ```
 
-- **Parameters**: `player` - The player who selected the item, `menu` - The menu instance, `itemIndex` - The index of the selected item
+- **Parameters**: `menu` - The menu instance, `player` - The player who selected the item, `itemPosition` - The position of the selected item, `itemOnPage` - The position of the item on the current page, `data` - Custom data associated with the item
 
 ### MenuItemStyleFlags
 
@@ -180,46 +232,63 @@ Enum for menu item style flags.
 
 - `Disabled = 0`: Item is disabled and cannot be selected
 - `Active = 1`: Item is active and can be selected
-- `HasNumber = 2`: Item displays with a number
+- `HasNumber = 2`: Item has a number prefix
 - `Control = 4`: Item is a control item
-- `Default = Active | HasNumber`: Default style (active with number)
-- `Full = Default | Control`: Full style (default with control)
+
+### MenuItemControlFlags
+
+Enum for menu item control flags.
+
+- `Panel = 0`: Panel control
+- `Back = 1`: Back button
+- `Next = 2`: Next button
+- `Exit = 4`: Exit button
 
 ## Notes
 
 - Plugins using this API depend on the MenuSystemSharp plugin
-- If the MenuSystemSharp plugin is not loaded, `MenuSystemAPI.IsAvailable` will return `false`
+- If the MenuSystemSharp plugin is not loaded, `MenuSystem.Instance` will be `null`
 - Proper error handling should be implemented when creating or displaying menus, as exceptions may occur
+- Menu instances implement `IDisposable` and should be properly disposed when no longer needed
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Q: `MenuSystemAPI.IsAvailable` returns `false`**
+**Q: `MenuSystem.Instance` is `null`**
 A: Check the following:
 - MenuSystemSharp plugin is properly installed and loaded
 - Wend4r's mms2-menu_system MetaMod plugin is installed
 - Plugin load order (MenuSystemSharp should load before your plugin)
+- Use `OnAllPluginsLoaded` event to ensure MenuSystemSharp is loaded
 
 **Q: Menu doesn't display**
 A: Verify:
 - Player is valid and not a bot
-- `MenuSystemAPI.IsAvailable` returns `true`
-- `DisplayMenu` method returns `true`
+- `MenuSystem.Instance` is not null
+- Menu profile exists and is valid
+- `DisplayToPlayer` method returns `true`
 - No exceptions are thrown during menu creation
 
 **Q: Menu callbacks don't work**
 A: Ensure:
-- Callback functions are properly defined
-- Menu items are added with the correct callback syntax
+- Callback functions are properly defined with correct signature
+- Menu items are added with the correct handler syntax
 - Player is selecting items correctly
+
+**Q: Profile not found**
+A: Check:
+- Profile name is correct (default profile is "default")
+- MenuSystemSharp plugin configuration includes the required profiles
 
 ### Best Practices
 
-- Always check `MenuSystemAPI.IsAvailable` before using the API
+- Always check `MenuSystem.Instance` is not null before using the API
+- Use `OnAllPluginsLoaded` event to initialize menu system reference
 - Use try-catch blocks when creating or displaying menus
 - Validate player objects before displaying menus
 - Handle exceptions gracefully and provide user feedback
+- Dispose menu instances when no longer needed
 
 ## License
 

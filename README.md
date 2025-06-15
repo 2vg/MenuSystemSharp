@@ -56,94 +56,136 @@ Please see: [Wend4r/mms2-menu_system](https://github.com/Wend4r/mms2-menu_system
 
 ### 2. Using in External Plugins
 1. Install the `MenuSystemSharp.API` NuGet package
-2. Use the API to create and display menus
+2. Initialize the menu system in your plugin's `OnAllPluginsLoaded` method
+3. Use the API to create and display menus
 
 ### 3. Example
 
 ```csharp
+using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using MenuSystemSharp.API;
 
-[ConsoleCommand("css_mymenu", "Opens a custom menu")]
-public void OnMyMenuCommand(CCSPlayerController? player, CommandInfo commandInfo)
+public class MyPlugin : BasePlugin
 {
-    if (player == null || !player.IsValid || player.IsBot)
-        return;
+    private IMenuSystem? _menuSystem;
 
-    if (!MenuSystemAPI.IsAvailable)
+    public override void OnAllPluginsLoaded(bool hotReload)
     {
-        player.PrintToChat("MenuSystem is not available. Make sure MenuSystemSharp plugin is loaded.");
-        return;
-    }
-
-    try
-    {
-        var menu = MenuSystemAPI.CreateMenu("My Custom Menu");
-
-        menu.AddItem("Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+        RegisterListener<Listeners.OnMetamodAllPluginsLoaded>(() =>
         {
-            selectedPlayer?.PrintToChat($"You selected Option 1 (index: {itemIndex})");
-        });
-
-        menu.AddItem("Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
-        {
-            selectedPlayer?.PrintToChat("You selected Option 2");
-        });
-
-        menu.AddItem("Submenu", (selectedPlayer, selectedMenu, itemIndex) =>
-        {
-            if (selectedPlayer != null)
+            if (MenuSystem.Instance == null)
             {
-                ShowSubmenu(selectedPlayer);
+                throw new InvalidOperationException("MenuSystemSharp plugin is not loaded. Please ensure it is installed and loaded before this plugin.");
+            }
+            else
+            {
+                _menuSystem = MenuSystem.Instance;
             }
         });
+    }
 
-        menu.AddItem("Close Menu", (selectedPlayer, selectedMenu, itemIndex) =>
-        {
-            MenuSystemAPI.CloseMenu(selectedMenu);
-            selectedPlayer?.PrintToChat("Menu closed");
-        });
+    [ConsoleCommand("css_mymenu", "Opens a custom menu")]
+    public void OnMyMenuCommand(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (player == null || !player.IsValid || player.IsBot)
+            return;
 
-        if (MenuSystemAPI.DisplayMenu(menu, player))
+        if (_menuSystem == null)
         {
-            Console.WriteLine($"Menu displayed to {player.PlayerName}");
+            player.PrintToChat("MenuSystem is not available. Make sure MenuSystemSharp plugin is loaded.");
+            return;
         }
-        else
+
+        try
         {
-            player.PrintToChat("Failed to display menu");
+            var menu = _menuSystem.CreateMenu();
+            menu.Title = "My Custom Menu";
+
+            // Add menu items with callbacks
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 1", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat($"You selected Option 1 (position: {itemPosition})");
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 2", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat("You selected Option 2");
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                ShowSubmenu(selectedPlayer);
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Close Menu", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                menu.Close();
+                selectedPlayer.PrintToChat("Menu closed");
+            });
+
+            // Display the menu to the player
+            if (menu.DisplayToPlayer(player))
+            {
+                Console.WriteLine($"Menu displayed to {player.PlayerName}");
+            }
+            else
+            {
+                player.PrintToChat("Failed to display menu");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating menu: {ex.Message}");
+            player.PrintToChat("Error creating menu");
         }
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error creating menu: {ex.Message}");
-        player.PrintToChat("Error creating menu");
-    }
-}
 
-private void ShowSubmenu(CCSPlayerController player)
-{
-    try
+    private void ShowSubmenu(CCSPlayerController player)
     {
-        var submenu = MenuSystemAPI.CreateMenu("Submenu");
-
-        submenu.AddItem("Submenu Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+        if (_menuSystem == null)
         {
-            selectedPlayer?.PrintToChat("You selected Submenu Option 1");
-        });
+            player.PrintToChat("Menu system is not available");
+            return;
+        }
 
-        submenu.AddItem("Submenu Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+        try
         {
-            selectedPlayer?.PrintToChat("You selected Submenu Option 2");
-        });
+            // Get the default profile
+            var profile = _menuSystem.GetProfile("default");
+            if (profile == null)
+            {
+                player.PrintToChat("Default menu profile not found");
+                return;
+            }
 
-        MenuSystemAPI.DisplayMenu(submenu, player);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Error creating submenu: {ex.Message}");
-        player.PrintToChat("Error creating submenu");
+            var submenu = _menuSystem.CreateMenu(profile);
+            submenu.Title = "Submenu";
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 1", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat("You selected Submenu Option 1");
+            });
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 2", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat("You selected Submenu Option 2");
+            });
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Back", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                submenu.Close();
+            });
+
+            submenu.DisplayToPlayer(player);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating submenu: {ex.Message}");
+            player.PrintToChat("Error creating submenu");
+        }
     }
 }
 ```
@@ -151,20 +193,31 @@ private void ShowSubmenu(CCSPlayerController player)
 ### 4. Advanced Example
 
 ```csharp
-// Create a menu with custom profile
-var menu = MenuSystemAPI.CreateMenu("Custom Menu", "my_profile");
+// Get a custom profile
+var customProfile = _menuSystem.GetProfile("my_profile");
+if (customProfile != null)
+{
+    var menu = _menuSystem.CreateMenu(customProfile);
+    menu.Title = "Custom Menu";
 
-// Add items with different styles
-menu.AddItem("Active Item", callback, MenuItemStyleFlags.Active);
-menu.AddItem("Disabled Item", callback, MenuItemStyleFlags.Disabled);
-menu.AddItem("Control Item", callback, MenuItemStyleFlags.Control);
+    // Add items with different styles
+    menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Active Item", callback);
+    menu.AddItem(MenuItemStyleFlags.Disabled, "Disabled Item", callback);
+    menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.Control, "Control Item", callback);
 
-// Display menu with custom parameters (auto-close after 10 seconds)
-MenuSystemAPI.DisplayMenu(menu, player, startItem: 0, displayTime: 10);
+    // Set item controls (back, next, exit buttons)
+    menu.ItemControls = MenuItemControlFlags.Back | MenuItemControlFlags.Next | MenuItemControlFlags.Exit;
 
-// Get active menu information
-int activeMenuIndex = MenuSystemAPI.GetActiveMenuIndex(player);
-var activeMenu = MenuSystemAPI.GetActiveMenu(player);
+    // Display menu with custom parameters (auto-close after 10 seconds)
+    menu.DisplayToPlayer(player, startItem: 0, displayTime: 10);
+
+    // Get active menu information
+    var activeMenu = _menuSystem.GetPlayerActiveMenu(player);
+    if (activeMenu != null)
+    {
+        Console.WriteLine($"Player has active menu: {activeMenu.Title}");
+    }
+}
 ```
 
 ## Building

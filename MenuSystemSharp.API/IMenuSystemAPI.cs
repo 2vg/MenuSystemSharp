@@ -3,230 +3,214 @@ using CounterStrikeSharp.API.Core;
 namespace MenuSystemSharp.API;
 
 /// <summary>
-/// Delegate for menu item selection callbacks
-/// </summary>
-/// <param name="player">The player who selected the item</param>
-/// <param name="menu">The menu instance</param>
-/// <param name="itemIndex">The index of the selected item</param>
-public delegate void MenuItemSelectAction(CCSPlayerController? player, IMenuAPI menu, int itemIndex);
-
-/// <summary>
 /// Menu item style flags
 /// </summary>
 [Flags]
 public enum MenuItemStyleFlags : byte
 {
+    /// <summary>
+    /// Item is disabled and cannot be selected
+    /// </summary>
     Disabled = 0,
+
+    /// <summary>
+    /// Item is active and can be selected
+    /// </summary>
     Active = 1 << 0,
+
+    /// <summary>
+    /// Item has a number prefix
+    /// </summary>
     HasNumber = 1 << 1,
-    Control = 1 << 2,
-    Default = Active | HasNumber,
-    Full = Default | Control
+
+    /// <summary>
+    /// Item is a control item
+    /// </summary>
+    Control = 1 << 2
 }
 
 /// <summary>
-/// API interface for menu instances
+/// Menu item control flags
 /// </summary>
-public interface IMenuAPI
+[Flags]
+public enum MenuItemControlFlags : int
 {
     /// <summary>
-    /// Gets the title of the menu
+    /// Panel control
     /// </summary>
-    string GetTitle();
+    Panel = 0,
 
     /// <summary>
-    /// Sets the title of the menu
+    /// Back button
     /// </summary>
-    /// <param name="title">The new title</param>
-    void SetTitle(string title);
+    Back = 1 << 0,
 
     /// <summary>
-    /// Adds a menu item with a callback action
+    /// Next button
     /// </summary>
-    /// <param name="content">The item text</param>
-    /// <param name="onSelectCallback">The action to invoke when selected</param>
-    /// <param name="style">The item style</param>
-    /// <returns>The index of the added item</returns>
-    int AddItem(string content, MenuItemSelectAction onSelectCallback, MenuItemStyleFlags style = MenuItemStyleFlags.Default);
+    Next = 1 << 1,
 
     /// <summary>
-    /// Adds a simple menu item without a callback
+    /// Exit button
     /// </summary>
-    /// <param name="content">The item text</param>
-    /// <param name="style">The item style</param>
-    /// <returns>The index of the added item</returns>
-    int AddItem(string content, MenuItemStyleFlags style = MenuItemStyleFlags.Default);
+    Exit = 1 << 2
+}
+
+/// <summary>
+/// Menu item handler delegate
+/// </summary>
+/// <param name="menu">The menu instance</param>
+/// <param name="player">The player who selected the item</param>
+/// <param name="itemPosition">The position of the selected item</param>
+/// <param name="itemOnPage">The position of the item on the current page</param>
+/// <param name="data">Custom data associated with the item</param>
+public delegate void MenuItemHandler(IMenuInstance menu, CCSPlayerController player, int itemPosition, int itemOnPage, IntPtr data);
+
+/// <summary>
+/// Interface for menu profiles
+/// </summary>
+public interface IMenuProfile
+{
+    /// <summary>
+    /// Gets the profile name
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
+    /// Gets the native pointer to the profile
+    /// </summary>
+    IntPtr NativePtr { get; }
+}
+
+/// <summary>
+/// Interface for menu instances
+/// </summary>
+public interface IMenuInstance : IDisposable
+{
+    /// <summary>
+    /// Gets or sets the menu title
+    /// </summary>
+    string Title { get; set; }
+
+    /// <summary>
+    /// Gets the native pointer to the menu instance
+    /// </summary>
+    IntPtr NativePtr { get; }
+
+    /// <summary>
+    /// Gets or sets the item control flags
+    /// </summary>
+    MenuItemControlFlags ItemControls { get; set; }
+
+    /// <summary>
+    /// Adds an item to the menu
+    /// </summary>
+    /// <param name="styleFlags">Style flags for the item</param>
+    /// <param name="content">The text content of the item</param>
+    /// <param name="handler">Handler to call when item is selected</param>
+    /// <param name="data">Custom data to associate with the item</param>
+    /// <returns>The position of the added item</returns>
+    int AddItem(MenuItemStyleFlags styleFlags, string content, MenuItemHandler? handler = null, IntPtr data = default);
+
+    /// <summary>
+    /// Removes an item from the menu
+    /// </summary>
+    /// <param name="itemPosition">The position of the item to remove</param>
+    void RemoveItem(int itemPosition);
+
+    /// <summary>
+    /// Gets the style flags of an item
+    /// </summary>
+    /// <param name="itemPosition">The position of the item</param>
+    /// <returns>The style flags of the item</returns>
+    MenuItemStyleFlags GetItemStyles(int itemPosition);
+
+    /// <summary>
+    /// Gets the content of an item
+    /// </summary>
+    /// <param name="itemPosition">The position of the item</param>
+    /// <returns>The content of the item</returns>
+    string GetItemContent(int itemPosition);
 
     /// <summary>
     /// Gets the current position for a player
     /// </summary>
-    /// <param name="playerSlot">The player slot</param>
+    /// <param name="player">The player</param>
     /// <returns>The current position</returns>
-    int GetCurrentPosition(int playerSlot);
+    int GetCurrentPosition(CCSPlayerController player);
+
+    /// <summary>
+    /// Displays the menu to a player
+    /// </summary>
+    /// <param name="player">The player to display the menu to</param>
+    /// <param name="startItem">The starting item position</param>
+    /// <param name="displayTime">How long to display the menu (0 = forever)</param>
+    /// <returns>True if the menu was displayed successfully</returns>
+    bool DisplayToPlayer(CCSPlayerController player, int startItem = 0, int displayTime = 0);
+
+    /// <summary>
+    /// Closes the menu
+    /// </summary>
+    /// <returns>True if the menu was closed successfully</returns>
+    bool Close();
 }
 
 /// <summary>
-/// Main API interface for the MenuSystem
+/// Interface for the menu system
 /// </summary>
-public interface IMenuSystemAPI
+public interface IMenuSystem
 {
     /// <summary>
-    /// Checks whether the MenuSystem is available
+    /// Gets a menu profile by name
+    /// </summary>
+    /// <param name="profileName">The name of the profile (default: "default")</param>
+    /// <returns>The menu profile, or null if not found</returns>
+    IMenuProfile? GetProfile(string profileName = "default");
+
+    /// <summary>
+    /// Creates a new menu instance, using the default profile
+    /// </summary>
+    /// <returns>A new menu instance</returns>
+    IMenuInstance CreateMenu();
+
+    /// <summary>
+    /// Creates a new menu instance
+    /// </summary>
+    /// <param name="profile">The profile to use for the menu</param>
+    /// <returns>A new menu instance</returns>
+    IMenuInstance CreateMenu(IMenuProfile profile);
+
+    /// <summary>
+    /// Gets the currently active menu for a player
+    /// </summary>
+    /// <param name="player">The player</param>
+    /// <returns>The active menu instance, or null if no menu is active</returns>
+    IMenuInstance? GetPlayerActiveMenu(CCSPlayerController player);
+
+    /// <summary>
+    /// Checks if the menu system is available
     /// </summary>
     bool IsAvailable { get; }
-
-    /// <summary>
-    /// Creates a menu using the default profile
-    /// </summary>
-    /// <param name="title">The title of the menu</param>
-    /// <returns>The created menu instance</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the MenuSystem is not available</exception>
-    IMenuAPI CreateMenu(string title);
-
-    /// <summary>
-    /// Creates a menu using the specified profile
-    /// </summary>
-    /// <param name="title">The title of the menu</param>
-    /// <param name="profileName">The name of the profile to use</param>
-    /// <returns>The created menu instance</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the MenuSystem or specified profile is not available</exception>
-    IMenuAPI CreateMenu(string title, string profileName);
-
-    /// <summary>
-    /// Displays the menu to a player
-    /// </summary>
-    /// <param name="menu">The menu to display</param>
-    /// <param name="player">The target player</param>
-    /// <param name="startItem">The starting item index (default: 0)</param>
-    /// <param name="displayTime">The display duration in seconds (default: 0 = unlimited)</param>
-    /// <returns>True if displayed successfully</returns>
-    bool DisplayMenu(IMenuAPI menu, CCSPlayerController player, int startItem = 0, int displayTime = 0);
-
-    /// <summary>
-    /// Closes the specified menu
-    /// </summary>
-    /// <param name="menu">The menu to close</param>
-    /// <returns>True if closed successfully</returns>
-    bool CloseMenu(IMenuAPI menu);
-
-    /// <summary>
-    /// Gets the active menu index for a player
-    /// </summary>
-    /// <param name="player">The target player</param>
-    /// <returns>The active menu index, or -1 if no active menu</returns>
-    int GetActiveMenuIndex(CCSPlayerController player);
-
-    /// <summary>
-    /// Gets the active menu instance for a player
-    /// </summary>
-    /// <param name="player">The target player</param>
-    /// <returns>The active menu instance, or null if no active menu</returns>
-    IMenuAPI? GetActiveMenu(CCSPlayerController player);
 }
 
 /// <summary>
-/// Static API provider for accessing the MenuSystem
+/// Static accessor for the menu system
 /// </summary>
-public static class MenuSystemAPI
+public static class MenuSystem
 {
-    private static IMenuSystemAPI? _instance;
+    private static IMenuSystem? _instance;
 
     /// <summary>
-    /// Gets the current MenuSystem API instance
+    /// Gets the menu system instance
     /// </summary>
-    public static IMenuSystemAPI? Instance => _instance;
+    public static IMenuSystem? Instance => _instance;
 
     /// <summary>
-    /// Registers the MenuSystem API implementation (called by the MenuSystemSharp plugin)
+    /// Sets the menu system instance (internal use only)
     /// </summary>
-    /// <param name="implementation">The implementation to register</param>
-    public static void RegisterImplementation(IMenuSystemAPI implementation)
+    /// <param name="instance">The menu system instance</param>
+    public static void SetInstance(IMenuSystem? instance)
     {
-        _instance = implementation;
-    }
-
-    /// <summary>
-    /// Unregisters the MenuSystem API implementation (called by the MenuSystemSharp plugin)
-    /// </summary>
-    public static void UnregisterImplementation()
-    {
-        _instance = null;
-    }
-
-    /// <summary>
-    /// Checks whether the MenuSystem is available
-    /// </summary>
-    public static bool IsAvailable => _instance?.IsAvailable ?? false;
-
-    /// <summary>
-    /// Creates a menu using the default profile
-    /// </summary>
-    /// <param name="title">The title of the menu</param>
-    /// <returns>The created menu instance</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the MenuSystem is not available</exception>
-    public static IMenuAPI CreateMenu(string title)
-    {
-        if (_instance == null)
-            throw new InvalidOperationException("MenuSystem API is not available. Make sure the MenuSystemSharp plugin is loaded.");
-
-        return _instance.CreateMenu(title);
-    }
-
-    /// <summary>
-    /// Creates a menu using the specified profile
-    /// </summary>
-    /// <param name="title">The title of the menu</param>
-    /// <param name="profileName">The name of the profile to use</param>
-    /// <returns>The created menu instance</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the MenuSystem or specified profile is not available</exception>
-    public static IMenuAPI CreateMenu(string title, string profileName)
-    {
-        if (_instance == null)
-            throw new InvalidOperationException("MenuSystem API is not available. Make sure the MenuSystemSharp plugin is loaded.");
-
-        return _instance.CreateMenu(title, profileName);
-    }
-
-    /// <summary>
-    /// Displays the menu to a player
-    /// </summary>
-    /// <param name="menu">The menu to display</param>
-    /// <param name="player">The target player</param>
-    /// <param name="startItem">The starting item index (default: 0)</param>
-    /// <param name="displayTime">The display duration in seconds (default: 0 = unlimited)</param>
-    /// <returns>True if displayed successfully</returns>
-    public static bool DisplayMenu(IMenuAPI menu, CCSPlayerController player, int startItem = 0, int displayTime = 0)
-    {
-        return _instance?.DisplayMenu(menu, player, startItem, displayTime) ?? false;
-    }
-
-    /// <summary>
-    /// Closes the specified menu
-    /// </summary>
-    /// <param name="menu">The menu to close</param>
-    /// <returns>True if closed successfully</returns>
-    public static bool CloseMenu(IMenuAPI menu)
-    {
-        return _instance?.CloseMenu(menu) ?? false;
-    }
-
-    /// <summary>
-    /// Gets the active menu index for a player
-    /// </summary>
-    /// <param name="player">The target player</param>
-    /// <returns>The active menu index, or -1 if no active menu</returns>
-    public static int GetActiveMenuIndex(CCSPlayerController player)
-    {
-        return _instance?.GetActiveMenuIndex(player) ?? -1;
-    }
-
-    /// <summary>
-    /// Gets the active menu instance for a player
-    /// </summary>
-    /// <param name="player">The target player</param>
-    /// <returns>The active menu instance, or null if no active menu</returns>
-    public static IMenuAPI? GetActiveMenu(CCSPlayerController player)
-    {
-        return _instance?.GetActiveMenu(player);
+        _instance = instance;
     }
 }

@@ -13,9 +13,25 @@ public class ExamplePlugin : BasePlugin
     public override string ModuleAuthor => "Example";
     public override string ModuleDescription => "Example plugin using MenuSystemSharp.API";
 
+    private IMenuSystem? _menuSystem;
+
     public override void Load(bool hotReload)
     {
-        Console.WriteLine($"[{ModuleName}] Plugin loaded");
+    }
+
+    public override void OnAllPluginsLoaded(bool hotReload)
+    {
+        RegisterListener<Listeners.OnMetamodAllPluginsLoaded>(() =>
+        {
+            if (MenuSystem.Instance == null)
+            {
+                throw new InvalidOperationException("MenuSystemSharp plugin is not loaded. Please ensure it is installed and loaded before this plugin.");
+            }
+            else
+            {
+                _menuSystem = MenuSystem.Instance;
+            }
+        });
     }
 
     [ConsoleCommand("css_examplemenu", "Opens an example menu")]
@@ -24,55 +40,57 @@ public class ExamplePlugin : BasePlugin
         if (player == null || !player.IsValid || player.IsBot)
             return;
 
-        // Check if MenuSystem is available
-        if (!MenuSystemAPI.IsAvailable)
+        if (_menuSystem == null)
         {
-            player.PrintToChat("MenuSystem is not available. Make sure MenuSystemSharp plugin is loaded.");
+            player.PrintToChat("Menu system is not available");
             return;
         }
 
         try
         {
-            // Create a menu using the API
-            var menu = MenuSystemAPI.CreateMenu("Example Menu");
+            var menu = _menuSystem.CreateMenu();
+            menu.Title = "Example Menu";
 
             // Add menu items with callbacks
-            menu.AddItem("Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 1", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                selectedPlayer?.PrintToChat($"You selected Option 1 (index: {itemIndex})");
+                selectedPlayer.PrintToChat($"You selected Option 1");
             });
 
-            menu.AddItem("Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 2", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                selectedPlayer?.PrintToChat($"You selected Option 2 (index: {itemIndex})");
+                selectedPlayer.PrintToChat($"You selected Option 2");
             });
 
-            menu.AddItem("Submenu", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 3", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                if (selectedPlayer != null)
-                {
-                    ShowSubmenu(selectedPlayer);
-                }
+                selectedPlayer.PrintToChat($"You selected Option 3");
             });
 
-            menu.AddItem("Close Menu", (selectedPlayer, selectedMenu, itemIndex) =>
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 4", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                if (selectedPlayer != null)
-                {
-                    MenuSystemAPI.CloseMenu(selectedMenu);
-                    selectedPlayer.PrintToChat("Menu closed");
-                }
+                selectedPlayer.PrintToChat($"You selected Option 4");
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Option 5", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat($"You selected Option 5");
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                ShowSubmenu(selectedPlayer);
+            });
+
+            menu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Close Menu", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                menu.Close();
+                selectedPlayer.PrintToChat("Menu closed");
             });
 
             // Display the menu to the player
-            if (MenuSystemAPI.DisplayMenu(menu, player))
-            {
-                Console.WriteLine($"[{ModuleName}] Menu displayed to {player.PlayerName}");
-            }
-            else
-            {
-                player.PrintToChat("Failed to display menu");
-            }
+            menu.DisplayToPlayer(player);
+            Console.WriteLine($"[{ModuleName}] Menu displayed to {player.PlayerName}");
         }
         catch (Exception ex)
         {
@@ -83,21 +101,51 @@ public class ExamplePlugin : BasePlugin
 
     private void ShowSubmenu(CCSPlayerController player)
     {
+        if (_menuSystem == null)
+        {
+            player.PrintToChat("Menu system is not available");
+            return;
+        }
+
         try
         {
-            var submenu = MenuSystemAPI.CreateMenu("Submenu");
-
-            submenu.AddItem("Submenu Option 1", (selectedPlayer, selectedMenu, itemIndex) =>
+            // Get the default profile
+            var profile = _menuSystem.GetProfile("default");
+            if (profile == null)
             {
-                selectedPlayer?.PrintToChat("You selected Submenu Option 1");
+                player.PrintToChat("Default menu profile not found");
+                return;
+            }
+
+            var submenu = _menuSystem.CreateMenu(profile);
+            submenu.Title = "Submenu";
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 1", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat($"You selected Submenu Option 1");
             });
 
-            submenu.AddItem("Submenu Option 2", (selectedPlayer, selectedMenu, itemIndex) =>
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 2", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
             {
-                selectedPlayer?.PrintToChat("You selected Submenu Option 2");
+                selectedPlayer.PrintToChat($"You selected Submenu Option 2");
             });
 
-            MenuSystemAPI.DisplayMenu(submenu, player);
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 3", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat($"You selected Submenu Option 3");
+            });
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Submenu Option 4", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                selectedPlayer.PrintToChat($"You selected Submenu Option 4");
+            });
+
+            submenu.AddItem(MenuItemStyleFlags.Active | MenuItemStyleFlags.HasNumber, "Back", (menuInstance, selectedPlayer, itemPosition, itemOnPage, data) =>
+            {
+                submenu.Close();
+            });
+
+            submenu.DisplayToPlayer(player);
         }
         catch (Exception ex)
         {
@@ -112,7 +160,7 @@ public class ExamplePlugin : BasePlugin
         if (player == null || !player.IsValid || player.IsBot)
             return;
 
-        if (MenuSystemAPI.IsAvailable)
+        if (_menuSystem != null)
         {
             player.PrintToChat("MenuSystem is available!");
         }
