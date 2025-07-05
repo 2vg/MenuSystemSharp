@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using MenuSystemSharp.API;
 using System.Collections.Concurrent;
 using System.Linq;
+using CounterStrikeSharp.API.Core.Attributes.Registration;
+using static CounterStrikeSharp.API.Core.Listeners;
 
 namespace MenuSystemSharp;
 
@@ -69,7 +71,7 @@ internal class MenuInstance : IMenuInstance
     public int AddItem(MenuItemStyleFlags styleFlags, string content, MenuItemHandler? handler = null, IntPtr data = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(MenuInstance));
-
+        
         int position;
         if (handler != null)
         {
@@ -80,7 +82,7 @@ internal class MenuInstance : IMenuInstance
         {
             position = _menuSystem.AddMenuItem(NativePtr, styleFlags, content, data);
         }
-
+        
         return position;
     }
 
@@ -144,7 +146,7 @@ internal class MenuSystemImpl : IMenuSystem
     private readonly IntPtr _profileSystemPtr;
     private readonly ConcurrentDictionary<IntPtr, MenuInstance> _menuInstances = new();
     private readonly ConcurrentDictionary<IntPtr, List<GCHandle>> _callbackHandles = new();
-
+    
     // Native function delegates
     private delegate IntPtr MenuSystemDelegate();
     private delegate IntPtr MenuSystemGetProfilesDelegate(IntPtr pSystem);
@@ -162,11 +164,8 @@ internal class MenuSystemImpl : IMenuSystem
     private delegate void MenuSetItemControlsDelegate(IntPtr pMenu, MenuItemControlFlags eNewControls);
     private delegate int MenuGetCurrentPositionDelegate(IntPtr pMenu, int aSlot);
     private delegate IntPtr MenuGetPlayerActiveMenuDelegate(IntPtr pSystem, int aSlot);
-
-    // C# callback support delegates
-    private delegate void CSharpMenuItemHandlerDelegate(IntPtr pMenu, int aSlot, int iItem, int iItemOnPage, IntPtr pData);
-    private delegate int MenuAddItemWithCSharpHandlerDelegate(IntPtr pMenu, MenuItemStyleFlags eFlags, IntPtr pszContent, CSharpMenuItemHandlerDelegate pfnCSharpHandler, IntPtr pData);
-    private delegate void MenuRemoveCSharpHandlersDelegate(IntPtr pMenu);
+    
+    private delegate void MenuItemHandlerDelegate(IntPtr pMenu, int aSlot, int iItem, int iItemOnPage, IntPtr pData);
 
     // Native function instances
     private readonly MenuSystemDelegate _menuSystem;
@@ -185,10 +184,7 @@ internal class MenuSystemImpl : IMenuSystem
     private readonly MenuSetItemControlsDelegate _menuSetItemControls;
     private readonly MenuGetCurrentPositionDelegate _menuGetCurrentPosition;
     private readonly MenuGetPlayerActiveMenuDelegate _menuGetPlayerActiveMenu;
-
-    // C# callback support function instances
-    private readonly MenuAddItemWithCSharpHandlerDelegate _menuAddItemWithCSharpHandler;
-    private readonly MenuRemoveCSharpHandlersDelegate _menuRemoveCSharpHandlers;
+    
 
     public bool IsAvailable => _menuSystemPtr != IntPtr.Zero;
 
@@ -227,12 +223,7 @@ internal class MenuSystemImpl : IMenuSystem
             NativeLibrary.GetExport(libraryHandle, "Menu_GetCurrentPosition"));
         _menuGetPlayerActiveMenu = Marshal.GetDelegateForFunctionPointer<MenuGetPlayerActiveMenuDelegate>(
             NativeLibrary.GetExport(libraryHandle, "Menu_GetPlayerActiveMenu"));
-
-        // Load C# callback support functions
-        _menuAddItemWithCSharpHandler = Marshal.GetDelegateForFunctionPointer<MenuAddItemWithCSharpHandlerDelegate>(
-            NativeLibrary.GetExport(libraryHandle, "Menu_AddItemWithCSharpHandler"));
-        _menuRemoveCSharpHandlers = Marshal.GetDelegateForFunctionPointer<MenuRemoveCSharpHandlersDelegate>(
-            NativeLibrary.GetExport(libraryHandle, "Menu_RemoveCSharpHandlers"));
+        
 
         // Initialize menu system
         _menuSystemPtr = _menuSystem();
@@ -345,7 +336,7 @@ internal class MenuSystemImpl : IMenuSystem
         try
         {
             // Create a native callback that will call our C# handler
-            CSharpMenuItemHandlerDelegate nativeCallback = (pMenu, aSlot, iItem, iItemOnPage, pData) =>
+            MenuItemHandlerDelegate nativeCallback = (pMenu, aSlot, iItem, iItemOnPage, pData) =>
             {
                 try
                 {
@@ -376,8 +367,9 @@ internal class MenuSystemImpl : IMenuSystem
             }
             _callbackHandles[menuPtr].Add(gcHandle);
 
-            var result = _menuAddItemWithCSharpHandler(menuPtr, styleFlags, contentPtr, nativeCallback, data);
-
+            var functionPtr = Marshal.GetFunctionPointerForDelegate(nativeCallback);
+            var result = _menuAddItem(menuPtr, styleFlags, contentPtr, functionPtr, data);
+            
             return result;
         }
         finally
@@ -414,9 +406,6 @@ internal class MenuSystemImpl : IMenuSystem
 
     internal bool CloseMenu(IntPtr menuPtr)
     {
-        // Clean up C# handlers first
-        _menuRemoveCSharpHandlers(menuPtr);
-
         // Clean up GC handles
         if (_callbackHandles.TryRemove(menuPtr, out var handles))
         {
@@ -428,10 +417,74 @@ internal class MenuSystemImpl : IMenuSystem
                 }
             }
         }
-
+        
         var result = _menuSystemCloseInstance(_menuSystemPtr, menuPtr);
         _menuInstances.TryRemove(menuPtr, out _);
         return result;
+    }
+
+    public void CleanupAllMenus()
+    {
+        if (!IsAvailable) return;
+
+        var menuInstancesToCleanup = _menuInstances.Values.ToList();
+        
+        foreach (var menuInstance in menuInstancesToCleanup)
+        {
+            try
+            {
+                menuInstance.Close();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        _menuInstances.Clear();
+
+        foreach (var kvp in _callbackHandles.ToList())
+        {
+            if (_callbackHandles.TryRemove(kvp.Key, out var handles))
+            {
+                foreach (var handle in handles)
+                {
+                    if (handle.IsAllocated)
+                    {
+                        try
+                        {
+                            handle.Free();
+                        }
+                        catch (Exception)
+                        {
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public void CleanupPlayerMenus(CCSPlayerController player)
+    {
+        if (!IsAvailable || player == null) return;
+
+        try
+        {
+            var activeMenu = GetPlayerActiveMenu(player);
+            while (activeMenu != null)
+            {
+                try
+                {
+                    activeMenu.Close();
+                }
+                catch (Exception)
+                {
+                }
+                activeMenu = GetPlayerActiveMenu(player);
+            }
+        }
+        catch (Exception)
+        {
+        }
     }
 }
 
@@ -511,6 +564,8 @@ public class MenuSystemSharp : BasePlugin
                 Logger.LogError(ex, "Failed to load menu system");
             }
         });
+
+        RegisterListener<OnMapStart>(OnMapStart);
     }
 
     // when plugin unload
@@ -536,5 +591,56 @@ public class MenuSystemSharp : BasePlugin
         }
 
         _instance = null;
+    }
+
+    [GameEventHandler]
+    public void OnMapStart(string mapname)
+    {
+        try
+        {
+            _menuSystemImpl?.CleanupAllMenus();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to cleanup menus on map start");
+        }
+    }
+
+    [GameEventHandler]
+    public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
+    {
+        try
+        {
+            var player = @event.Userid;
+            if (player != null && player.IsValid)
+            {
+                _menuSystemImpl?.CleanupPlayerMenus(player);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to cleanup player menus on disconnect");
+        }
+        
+        return HookResult.Continue;
+    }
+
+    [GameEventHandler]
+    public HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
+    {
+        try
+        {
+            var player = @event.Userid;
+            if (player != null && player.IsValid)
+            {
+                _menuSystemImpl?.CleanupPlayerMenus(player);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to cleanup player menus on death");
+        }
+        
+        return HookResult.Continue;
     }
 }
